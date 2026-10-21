@@ -470,10 +470,6 @@ méthode ; les parcours de billetterie sont maintenant testés avec leurs vérit
 controllers et services, en complément des sondes de sécurité. La suite OpenAPI/Actuator utilise la véritable chaîne de sécurité,
 les ressources Swagger et MySQL/Testcontainers.
 
-Les rapports sont générés dans `target/surefire-reports`. Les résultats réellement
-observés, les problèmes et les corrections sont consignés dans
-[docs/test-results.md](docs/test-results.md). Le journal des outils IA et des prompts
-se trouve dans [docs/ai-usage-log.md](docs/ai-usage-log.md).
 
 ## Références techniques
 

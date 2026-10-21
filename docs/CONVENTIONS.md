@@ -126,8 +126,8 @@ Les tables et colonnes utilisent `snake_case`, en anglais.
 
 **Répartition Flyway :**
 
-- Personne A : `V1__create_catalog.sql` — artists, venues, concerts.
-- Personne B : `V2__create_ticketing.sql` — customers, loyalty_cards, ticket_purchases.
+- Wendy : `V1__create_catalog.sql` — artists, venues, concerts.
+- Eunice : `V2__create_ticketing.sql` — customers, loyalty_cards, ticket_purchases.
 - Intégration develop : `V3__integrate_ticketing_constraints.sql` — total d’achat
   `DECIMAL(12,2)`, total positif et période de carte valide. L’ancienne réservation
   des données de démonstration n’avait pas de script ; utiliser une version ultérieure.
@@ -256,7 +256,7 @@ Arquitetura adotada:
 
 Le verrouillage des achats repose sur la base MySQL.
 
-Personne A fournit dans `ConcertRepository` :
+Wendy fournit dans `ConcertRepository` :
 
 ```java
 @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -266,7 +266,7 @@ Optional<Concert> findByIdForUpdate(
 );
 ```
 
-Personne B appelle cette méthode dans une transaction `@Transactional`.
+Eunice appelle cette méthode dans une transaction `@Transactional`.
 
 Le nombre de places restantes est défini par :
 
