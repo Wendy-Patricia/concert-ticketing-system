@@ -7,7 +7,7 @@ par ce document. Aucun script SQL vide ne réserve artificiellement une version.
 
 | Ordre | Fichier à créer | Responsable | Contenu |
 |---|---|---|---|
-| 1 | `V1__create_catalog.sql` | Personne A | `artists`, `venues`, `concerts`, contraintes et index du catalogue |
+| 1 | `V1__create_catalog.sql` (créée) | Personne A | `artists`, `venues`, `concerts`, contraintes et index du catalogue |
 | 2 | `V2__create_ticketing.sql` | Personne B | `customers`, `loyalty_cards`, `ticket_purchases`, contraintes et index de billetterie |
 | 3 | `V3__insert_demo_data.sql` | Personne A | Données de démonstration après création du schéma |
 
@@ -37,11 +37,18 @@ La confirmation du contrat et la revue de V2 restent à effectuer par le binôme
 - Les noms et checksums sont validés ; exécution hors ordre et baseline
   automatique désactivées. Aucun `clean` n'est autorisé par la configuration.
 
-## Validation différée
+## Validation du catalogue et suite des migrations
 
-INFRA-05 prépare l'intégration. Aucun V1, V2 ou V3 n'est encore créé. Un démarrage
-sans script et sans entités ne prouverait pas la validité du futur schéma.
-Après création de V1, vérifier sur une base de test vide son application et la
-table `flyway_schema_history`, puis valider les entités du catalogue avec
-`ddl-auto=validate`. Après réception de V2, tester la séquence V1 → V2 et ses clés
-étrangères. Un second démarrage doit laisser les migrations déjà appliquées intactes.
+V1 est désormais créée pour le catalogue. Elle définit les identifiants, les
+colonnes, les unicités, les clés étrangères et les contraintes de capacité et de
+prix. La date future est validée à l’écriture par Jakarta Validation (`@Future`) :
+aucun `CHECK` dépendant de l’heure courante n’est ajouté à MySQL.
+
+`CatalogPersistenceTests` utilise MySQL 8.4/Testcontainers et cette migration
+réelle, avec Hibernate en mode `validate`. Les tests vérifient également la
+présence de V1 dans `flyway_schema_history`. Les résultats sont consignés dans
+`docs/test-results.md` et `docs/ai-usage-log.md` à la racine du projet.
+
+V2 et V3 restent réservées. Après réception de V2, tester la séquence V1 → V2
+et ses clés étrangères. Un second démarrage doit laisser les migrations déjà
+appliquées intactes. Ne pas modifier V1 après son application à une base partagée.

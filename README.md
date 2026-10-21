@@ -61,9 +61,11 @@ Flyway est activé dans `classpath:db/migration`. Hibernate utilise
 `ddl-auto=validate` et ne crée pas de tables. La réservation des versions et le
 contrat avec la Personne B sont décrits dans
 [le guide des migrations](src/main/resources/db/migration/README.md).
-La validation SQL réelle reste à effectuer après création de V1.
+V1 crée désormais les tables `artists`, `venues` et `concerts`. Les tests
+`CatalogPersistenceTests` vérifient la migration, les relations et les contraintes
+sur MySQL 8.4/Testcontainers, avec Hibernate en mode `validate`.
 
 Actuator expose `/actuator/health` et les sondes `/actuator/health/liveness` et
 `/actuator/health/readiness`, sans détails internes. La vérification de santé
-globale inclut la connexion à la base ; la disponibilité HTTP complète sera
-vérifiée avec le futur schéma et la configuration de sécurité applicative.
+globale inclut la connexion à la base. Les trois endpoints ont été vérifiés avec
+le JAR et le schéma V1 : HTTP 200 et état `UP`.
