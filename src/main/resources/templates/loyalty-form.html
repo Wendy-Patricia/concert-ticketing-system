@@ -1,0 +1,44 @@
+
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Carte de fidélité</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+
+<header>
+    <h1>Concert Ticketing System</h1>
+</header>
+
+<nav>
+    <a th:href="@{/clients/inscription}">Inscription</a>
+    <a th:href="@{/fidelite}">Fidélité</a>
+    <a th:href="@{/billets/acheter}">Billets</a>
+</nav>
+
+<main>
+    <h2>Carte de fidélité</h2>
+
+    <p>Une carte valable un an donne droit à une réduction
+        de 10 % sur les billets.</p>
+
+    <p th:if="${message}" class="message"
+       th:text="${message}"></p>
+
+    <p th:if="${error}" class="message error"
+       th:text="${error}"></p>
+
+    <form th:action="@{/fidelite}" method="post">
+
+        <label for="customerId">Identifiant client</label>
+        <input id="customerId" type="number"
+               name="customerId" min="1" required>
+
+        <button type="submit">Acheter la carte</button>
+    </form>
+</main>
+
+</body>
+</html>

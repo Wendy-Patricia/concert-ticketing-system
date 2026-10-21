@@ -3,6 +3,7 @@ package com.example.concertticketingsystem.repository;
 
 import com.example.concertticketingsystem.entity.LoyaltyCard;
 import org.springframework.data.jpa.repository.JpaRepository;
+
 import java.time.LocalDate;
 
 public interface LoyaltyCardRepository
@@ -10,13 +11,7 @@ public interface LoyaltyCardRepository
 
     boolean existsByCustomerIdAndPurchasedAtLessThanEqualAndExpiresAtGreaterThan(
             Long customerId,
-            LocalDate date1,
-            LocalDate date2
-    );
-
-    boolean existsByCustomerIdAndPurchasedAtLessThanEqualAndExpiresAtGreaterThanEqual(
-            Long customerId,
-            LocalDate date1,
-            LocalDate date2
+            LocalDate purchaseDate,
+            LocalDate expiryDate
     );
 }
