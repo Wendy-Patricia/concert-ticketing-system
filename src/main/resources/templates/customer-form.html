@@ -1,0 +1,49 @@
+
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Inscription client</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+
+<header>
+    <h1>Concert Ticketing System</h1>
+</header>
+
+<nav>
+    <a th:href="@{/clients/inscription}">Inscription</a>
+    <a th:href="@{/fidelite}">Fidélité</a>
+    <a th:href="@{/billets/acheter}">Billets</a>
+</nav>
+
+<main>
+    <h2>Inscription client</h2>
+
+    <p th:if="${message}" class="message"
+       th:text="${message}"></p>
+
+    <p th:if="${error}" class="message error"
+       th:text="${error}"></p>
+
+    <form th:action="@{/clients/inscription}" method="post">
+
+        <label for="name">Nom</label>
+        <input id="name" type="text" name="name" required>
+
+        <label for="email">E-mail</label>
+        <input id="email" type="email" name="email" required>
+
+        <label for="street">Rue</label>
+        <input id="street" type="text" name="street" required>
+
+        <label for="city">Ville</label>
+        <input id="city" type="text" name="city" required>
+
+        <button type="submit">S'inscrire</button>
+    </form>
+</main>
+
+</body>
+</html>
