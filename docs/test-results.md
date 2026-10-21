@@ -108,3 +108,62 @@ en français figurent dans [ai-usage-log.md](ai-usage-log.md).
 
 Limites : la date future est contrôlée par Jakarta Validation à l’écriture JPA,
 pas par une insertion SQL directe. V2/V3 restent hors du périmètre de cette tâche.
+
+## API REST du catalogue — 21 octobre 2026
+
+### Commandes réellement exécutées
+
+| Vérification | Résultat attendu | Résultat obtenu |
+|---|---|---|
+| `.\mvnw.cmd clean verify` | Compilation Java 25, tests et création du JAR | `BUILD SUCCESS`, 94 tests exécutés, 0 échec, 0 erreur, 0 test ignoré. |
+| Lancement temporaire du JAR hors IDE avec variables locales et `--server.port=0` | Démarrage avec V1 et les nouveaux repositories/services/controllers | Démarrage réussi ; processus arrêté après les contrôles. |
+| Requête `/actuator/health` sur le JAR | HTTP 200 | HTTP 200. |
+| Requête `GET /api/concerts` sur le JAR avec compte Basic temporaire | HTTP 200 et tableau JSON | HTTP 200 et liste JSON. Aucun compte ni secret ajouté aux fichiers versionnés. |
+| `git diff --check` | Absence d’erreurs d’espacement | Code de sortie 0. |
+
+### Répartition des tests
+
+| Classe | Tests | Échecs | Erreurs | Ignorés |
+|---|---:|---:|---:|---:|
+| `ApplicationConfigurationTests` | 3 | 0 | 0 | 0 |
+| `CatalogApiTests` | 41 | 0 | 0 | 0 |
+| `CatalogPersistenceTests` | 36 | 0 | 0 | 0 |
+| `CatalogRolePreparationTests` | 6 | 0 | 0 | 0 |
+| `ConcertTicketingSystemApplicationTests` | 1 | 0 | 0 | 0 |
+| `ArtistTests` | 7 | 0 | 0 | 0 |
+| **Total** | **94** | **0** | **0** | **0** |
+
+### Couverture de l’API
+
+- Créations 201 d’artiste, de salle et de concert ; identifiants générés et DTO
+  imbriqués ; `Location` du concert ; lecture du détail avec 200.
+- Liste vide, tri chronologique, filtres `du`, `au`, `artiste` séparés et combinés,
+  bornes inclusives de journée à la microseconde et exclusion du lendemain.
+- 400 : noms obligatoires, capacités 49/50 001/null, prix zéro/négatif/null/hors
+  précision, date passée, champs et associations manquants, JSON mal formé,
+  identifiants invalides, dates de filtre invalides et période inversée.
+- 404 : concert inexistant, artiste inconnu et salle inconnue.
+- 409 : artiste et salle dupliqués ; même salle dans une autre ville acceptée ;
+  conflit d’intégrité simulé avec vérification de l’absence de SQL dans la réponse.
+- Rôles dans une configuration de test uniquement : lecture publique autorisée,
+  CLIENT sans droit de création, PRODUCTEUR autorisé sur artistes/concerts,
+  ADMIN autorisé sur les trois créations, anonyme refusé en écriture.
+
+Les 41 tests API utilisent MockMvc avec les filtres HTTP désactivés, les vrais
+services/repositories et MySQL 8.4/Testcontainers. Les 6 tests de préparation des
+rôles utilisent `@WebMvcTest`, des services simulés et une sécurité de méthode
+activée dans une `@TestConfiguration`. Ils ne valident pas la future configuration
+de sécurité de l’application, qui reste inchangée.
+
+### Observations et adaptations
+
+Aucun échec de test n’a été rencontré pendant cette intervention. Les repositories
+absents ont été ajoutés, la cible de compilation a été alignée de Java 17 à Java
+25 et la borne supérieure des dates a été limitée à la précision de V1. Les
+annotations `@PreAuthorize` sont présentes, mais leur activation et les règles
+HTTP publiques restent à intégrer dans la branche sécurité.
+
+Rapports : `target/surefire-reports`. Journal de vérification :
+`target/api-clean-verify.log`. Journaux du JAR : `target/api-startup*.log`.
+Les limites et avertissements non bloquants sont détaillés dans
+[ai-usage-log.md](ai-usage-log.md). Aucune capture d’écran n’a été réalisée.

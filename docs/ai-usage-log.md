@@ -371,3 +371,160 @@ Personne B et V3 aux données de démonstration. La date future est une contrain
 applicative lors des écritures JPA ; une insertion SQL directe ne vérifie pas
 cette règle temporelle. V1 ne devra plus être modifiée après application sur
 une base partagée.
+
+## API REST du catalogue de concerts
+
+Date : 21 octobre 2026.
+
+### 1. Objectif
+
+Implémenter les lectures publiques du catalogue et la création d’artistes, de
+salles et de concerts, avec DTO records, validations, réponses HTTP cohérentes
+et préparation des rôles CLIENT, PRODUCTEUR et ADMIN. Conserver la configuration
+de sécurité existante et les fichiers de la Personne B.
+
+### 2. Démarche et raisonnement
+
+Les entités et V1 existent, mais aucun repository n’était présent dans cette
+copie du projet. Trois interfaces JPA ont donc été ajoutées pour les besoins du
+catalogue. La version Spring Boot reste 4.1.1 ; `java.version` passe de 17 à 25,
+conformément à la demande et au JDK installé.
+
+L’architecture suit `Controller → Service → Repository`. Les créations sont
+transactionnelles ; les lectures convertissent les entités en DTO dans la
+transaction. Les relations artiste/salle sont chargées avec une jointure ou un
+graphe d’entités pour éviter une sérialisation JPA et des accès différés après
+fermeture de la transaction.
+
+Les filtres `du` et `au` utilisent des dates ISO inclusives ; `artiste` est
+l’identifiant positif de l’artiste. Ils sont combinés par un ET et les résultats
+sont triés par date puis identifiant. La borne de fin utilise la dernière
+microseconde de la journée, compatible avec `DATETIME(6)`, pour éviter un arrondi
+vers le lendemain. Une période inversée produit 400 ; une recherche sans
+résultat produit une liste vide avec 200.
+
+Les DTO de requête portent les contraintes Jakarta et sont reçus avec `@Valid`.
+Les services vérifient l’existence des références et l’unicité ; les contraintes
+MySQL restent la garantie finale, notamment en cas de créations concurrentes.
+`saveAndFlush` permet de faire remonter ces erreurs dans le traitement HTTP.
+Les réponses sont des records, avec des DTO imbriqués pour l’artiste et la salle.
+
+`CatalogExceptionHandler` est un `@RestControllerAdvice` limité aux trois
+controllers du catalogue pour ne pas modifier le traitement des futurs endpoints
+de la Personne B. Le format d’erreur suit les conventions : `timestamp`, `status`,
+`code`, `message`, `path`. Les erreurs de validation renvoient 400, les références
+absentes 404 et les doublons/conflits d’intégrité 409, sans texte SQL.
+
+Les annotations `@PreAuthorize` préparent les autorisations : lectures publiques,
+créations d’artistes/concerts pour PRODUCTEUR ou ADMIN, salles pour ADMIN.
+Aucune activation de sécurité de méthode ni modification de chaîne HTTP n’est
+ajoutée dans l’application. La branche sécurité devra activer ces annotations et
+autoriser les lectures publiques. La configuration dédiée aux tests de rôle est
+une `@TestConfiguration`, sans effet sur l’application livrée.
+
+### 3. Documentation utilisée
+
+- [Spring Boot 4.1.1 — WebMvcTest](https://docs.spring.io/spring-boot/api/java/org/springframework/boot/webmvc/test/autoconfigure/WebMvcTest.html) :
+  tests MVC et configuration de MockMvc/sécurité.
+- [Spring Boot 4.1.1 — AutoConfigureMockMvc](https://docs.spring.io/spring-boot/api/java/org/springframework/boot/webmvc/test/autoconfigure/AutoConfigureMockMvc.html) :
+  configuration des tests HTTP avec contexte applicatif.
+- [Spring Boot — Testing Spring Boot Applications](https://docs.spring.io/spring-boot/reference/testing/spring-boot-applications.html) :
+  tests de contexte et imports des annotations de test de Spring Boot 4.
+- [Spring Security — Method Security](https://docs.spring.io/spring-security/reference/7.0/servlet/authorization/method-security.html) :
+  `@PreAuthorize` et activation par `@EnableMethodSecurity`.
+- [Conventions internes](CONVENTIONS.md) : routes en français, DTO records,
+  séparation controllers/services, codes applicatifs et format des erreurs.
+
+### 4. Utilisation de l’IA
+
+Outil : Codex. Modèle : GPT-6. Niveau de raisonnement exact non communiqué.
+Prompt initial reçu en français :
+
+```text
+implémente l'API REST du catalogue de concerts avec Java 25 et Spring Boot 4.1.1, en utilisant les entités et repositories déjà créés.
+
+Crée les controllers, services et DTO records nécessaires pour gérer les artistes, les salles et les concerts.
+
+Implémente les endpoints suivants :
+
+GET /api/concerts : lister les concerts avec des filtres optionnels du, au et artiste.
+
+GET /api/concerts/{id} : consulter les détails d'un concert.
+
+POST /api/production/artistes : créer un artiste.
+
+POST /api/production/concerts : créer un concert.
+
+POST /api/admin/salles : créer une salle.
+
+Ajoute les validations nécessaires : champs obligatoires, capacité des salles entre 50 et 50 000, prix strictement positif, date de concert future, références à un artiste et une salle existants et contraintes d'unicité.
+
+Utilise @Valid, des DTO records et un @RestControllerAdvice pour gérer les erreurs avec des réponses HTTP cohérentes : 201 Created, 200 OK, 400 Bad Request, 404 Not Found et 409 Conflict lorsque cela est approprié.
+
+Ajoute des tests JUnit et MockMvc pour vérifier les endpoints, les filtres, les validations et les erreurs HTTP. Prépare les endpoints pour les rôles CLIENT, PRODUCTEUR et ADMIN, sans modifier la configuration de sécurité qui sera développée dans une autre branche.
+
+Respecte l'architecture existante, ne modifie pas le travail de la Personne B et évite les changements inutiles. Exécute .\mvnw.cmd clean verify, corrige les erreurs rencontrées et documente les tests, les bugs et les corrections pour le compte rendu. Ne déclare aucun test réussi sans l'avoir exécuté.
+```
+
+Le message a ensuite été renvoyé avec la même demande fonctionnelle et la
+contrainte de ne pas modifier la configuration de sécurité.
+Propositions retenues : repositories JPA minimaux, services transactionnels,
+DTO records, advice limité au catalogue et tests séparant contrat métier et
+préparation des rôles. Aucune modification manuelle de l’utilisateur n’a été
+observée pendant cette intervention.
+
+### 5. Tests et vérifications
+
+`.\mvnw.cmd clean verify` a réellement été exécuté avec Java 25 : `BUILD SUCCESS`,
+94 tests, aucun échec, aucune erreur, aucun test ignoré.
+Les nouveaux tests sont `CatalogApiTests` (41 cas MockMvc avec MySQL réel) et
+`CatalogRolePreparationTests` (6 cas MVC avec services simulés et sécurité de
+méthode activée uniquement pour le test). Les 47 tests précédents passent aussi.
+
+Les tests vérifient les cinq endpoints, les DTO et identifiants, l’en-tête
+`Location` du concert créé, les filtres individuels et combinés, leurs bornes,
+l’ordre des résultats, les listes vides, les validations et les réponses 400,
+404 et 409. Les tests de rôle vérifient les accès public, CLIENT, PRODUCTEUR et
+ADMIN, ainsi que 401/403 dans la configuration de test.
+Le traitement d’un conflit SQL après le précontrôle est vérifié par une exception
+simulée ; aucune course concurrente réelle n’a été exécutée pour cette API.
+
+Le JAR a aussi démarré hors IDE contre le MySQL local : `/actuator/health` répond
+HTTP 200 et `GET /api/concerts` renvoie HTTP 200 avec une liste JSON, en utilisant
+l’authentification Basic actuelle. Un compte temporaire a été fourni uniquement
+au processus, sans identifiant versionné. Le processus a été arrêté après le test.
+
+### 6. Problèmes rencontrés et adaptations
+
+- Les repositories annoncés n’existaient pas localement : les trois interfaces
+  nécessaires ont été créées, sans modification des entités ni de V1.
+- Le projet compilait encore pour Java 17 : seule la propriété Java du POM a été
+  alignée sur Java 25. La dépendance TestNG préexistante est conservée.
+- La précision de fin de journée a été alignée sur les microsecondes MySQL avant
+  la vérification, et testée avec un concert à `23:59:59.999999` et un autre à
+  minuit le lendemain. Aucun échec d’exécution n’a été observé sur ce point.
+- La première vérification complète de cette intervention a réussi. Il n’y a donc
+  pas d’échec de test à présenter comme un bug corrigé.
+- Les avertissements non bloquants concernent les métadonnées de dépôts secondaires
+  HTTP 401, la version `RELEASE` de TestNG, les templates Thymeleaf absents et
+  l’agent Mockito. Le message du test `invalid-zone` est un refus volontaire déjà
+  couvert par les tests de configuration.
+
+Aucune capture d’écran n’a été réalisée. Les rapports Surefire et le journal de
+compilation sont conservés sous `target`, ignoré par Git.
+
+### 7. Traçabilité
+
+Fichiers ajoutés dans `controller`, `service`, `dto`, `exception` et `repository`,
+ainsi que `CatalogApiTests.java` et `CatalogRolePreparationTests.java`.
+Fichiers mis à jour : `pom.xml` (Java 25), README et les deux journaux de suivi.
+Aucun fichier d’entité, de migration ou de sécurité applicative n’a été modifié.
+Commit de cette intervention : non créé. Pull Request : non créée.
+
+### 8. Conclusion
+
+Le contrat REST du catalogue est implémenté et validé par 94 tests exécutés.
+L’intégration de la sécurité reste à effectuer dans sa branche : activation de la
+sécurité de méthode, authentification et règles HTTP publiques/privées. Les tests
+de préparation des rôles ne remplacent pas la validation de cette future
+configuration. Les filtres et les exemples de requête sont décrits dans le README.
