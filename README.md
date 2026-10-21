@@ -1,10 +1,10 @@
 # Concert Ticketing System
 
-## Instalação rápida — Windows / PowerShell
+## Installation rapide — Windows / PowerShell
 
-Precisas de **Git, JDK 25 e Docker Desktop**. Abre o Docker Desktop e espera que o motor Linux esteja ativo. Não precisas de instalar Maven: o projeto inclui o Maven Wrapper.
+Il te faut **Git, JDK 25 et Docker Desktop**. Ouvre Docker Desktop et attends que le moteur Linux soit actif. Tu n’as pas besoin d’installer Maven : le projet inclut le Maven Wrapper.
 
-### 1. Obter o projeto
+### 1. Récupérer le projet
 
 ```powershell
 git clone --branch develop https://github.com/Wendy-Patricia/concert-ticketing-system.git
@@ -13,31 +13,31 @@ java -version
 docker compose version
 ```
 
-Se já tens o projeto, abre o PowerShell na pasta que contém `pom.xml` e `compose.yaml`. O comando `java -version` deve indicar Java 25.
+Si tu as déjà le projet, ouvre PowerShell dans le dossier contenant `pom.xml` et `compose.yaml`. La commande `java -version` doit indiquer Java 25.
 
-### 2. Configurar a base de dados
+### 2. Configurer la base de données
 
 ```powershell
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 notepad .env
 ```
 
-No ficheiro `.env`, preenche `MYSQL_PASSWORD` e `MYSQL_ROOT_PASSWORD` com duas palavras-passe locais diferentes. Mantém as restantes opções do exemplo. Se a porta 3306 estiver ocupada, altera `MYSQL_PORT=3307`.
+Dans le fichier `.env`, renseigne `MYSQL_PASSWORD` et `MYSQL_ROOT_PASSWORD` avec deux mots de passe locaux différents. Conserve les autres options de l’exemple. Si le port 3306 est occupé, change `MYSQL_PORT=3307`.
 
-Guarda o ficheiro. O `.env` é privado e está ignorado pelo Git; não publiques palavras-passe.
+Enregistre le fichier. Le `.env` est privé et ignoré par Git ; ne publie pas de mots de passe.
 
-### 3. Iniciar o MySQL
+### 3. Démarrer MySQL
 
 ```powershell
 docker compose up -d --wait --wait-timeout 180
 docker compose ps
 ```
 
-O serviço `mysql` deve aparecer com o estado **healthy**. Os dados ficam guardados num volume Docker.
+Le service `mysql` doit apparaître avec l’état **healthy**. Les données sont conservées dans un volume Docker.
 
-### 4. Iniciar a aplicação
+### 4. Démarrer l’application
 
-O Spring Boot não carrega o `.env` automaticamente. Executa este bloco no PowerShell, na raiz do projeto, para importar a configuração do MySQL e iniciar a aplicação:
+Spring Boot ne charge pas automatiquement le `.env`. Exécute ce bloc dans PowerShell, à la racine du projet, pour importer la configuration MySQL et démarrer l’application :
 
 ```powershell
 $compose = docker compose config --format json | ConvertFrom-Json
@@ -51,43 +51,43 @@ $env:MYSQL_PASSWORD = [string]$mysql.environment.MYSQL_PASSWORD
 .\mvnw.cmd spring-boot:run
 ```
 
-Mantém este terminal aberto. No primeiro arranque, o Maven descarrega as dependências e o Flyway aplica automaticamente as migrações da base de dados.
+Garde ce terminal ouvert. Au premier démarrage, Maven télécharge les dépendances et Flyway applique automatiquement les migrations de la base de données.
 
-### 5. Aceder e testar
+### 5. Accéder et tester
 
-| Página | Endereço |
+| Page | Adresse |
 |---|---|
-| Swagger — consultar e testar a API | http://localhost:8080/swagger-ui.html |
-| Estado da aplicação — deve indicar `UP` | http://localhost:8080/actuator/health |
-| Lista de concertos | http://localhost:8080/api/concerts |
-| Inscrição de clientes | http://localhost:8080/clients/inscription |
+| Swagger — consulter et tester l’API | http://localhost:8080/swagger-ui.html |
+| État de l’application — doit indiquer `UP` | http://localhost:8080/actuator/health |
+| Liste des concerts | http://localhost:8080/api/concerts |
+| Inscription des clients | http://localhost:8080/clients/inscription |
 
-Para endpoints protegidos, usa **Authorize** no Swagger ou **Basic Auth** no Postman:
+Pour les endpoints protégés, utilise **Authorize** dans Swagger ou **Basic Auth** dans Postman :
 
-| Papel | Utilizador | Palavra-passe de demonstração |
+| Rôle | Utilisateur | Mot de passe de démonstration |
 |---|---|---|
 | CLIENT | `client` | `ClientDemo123!` |
 | PRODUCTEUR | `producteur` | `ProducteurDemo123!` |
 | ADMIN | `admin` | `AdminDemo123!` |
 
-Estas contas destinam-se à demonstração local.
+Ces comptes sont destinés à la démonstration locale.
 
-Para executar todos os testes, abre outro terminal na pasta do projeto, com o Docker Desktop ativo:
+Pour exécuter tous les tests, ouvre un autre terminal dans le dossier du projet, avec Docker Desktop actif :
 
 ```powershell
 .\mvnw.cmd clean verify
 ```
 
-O resultado esperado é **BUILD SUCCESS**. Os testes de integração usam MySQL isolado através de Testcontainers.
+Le résultat attendu est **BUILD SUCCESS**. Les tests d’intégration utilisent un MySQL isolé via Testcontainers.
 
-### Parar e resolver problemas comuns
+### Arrêter et résoudre les problèmes courants
 
-- **Parar a aplicação:** `Ctrl+C` no terminal onde está em execução.
-- **Parar o MySQL mantendo os dados:** `docker compose down`.
-- **Docker indisponível:** inicia o Docker Desktop e tenta novamente.
-- **Porta 3306 ocupada:** usa `MYSQL_PORT=3307` no `.env`, repete o passo 3 e depois o passo 4.
-- **Porta 8080 ocupada:** executa `$env:SERVER_PORT='8081'` antes de iniciar a aplicação e usa a porta 8081 nos endereços.
-- **Acesso MySQL recusado após alterar palavras-passe:** um volume já inicializado mantém as credenciais originais; volta a usar essas credenciais no `.env`.
+- **Arrêter l’application :** `Ctrl+C` dans le terminal où elle s’exécute.
+- **Arrêter MySQL en conservant les données :** `docker compose down`.
+- **Docker indisponible :** démarre Docker Desktop et réessaie.
+- **Port 3306 occupé :** utilise `MYSQL_PORT=3307` dans le `.env`, répète l’étape 3 puis l’étape 4.
+- **Port 8080 occupé :** exécute `$env:SERVER_PORT='8081'` avant de démarrer l’application et utilise le port 8081 dans les adresses.
+- **Accès MySQL refusé après modification des mots de passe :** un volume déjà initialisé conserve les identifiants d’origine ; réutilise ces identifiants dans le `.env`.
 
 ---
 
