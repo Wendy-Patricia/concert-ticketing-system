@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import com.example.concertticketingsystem.config.ClockConfig;
+import com.example.concertticketingsystem.config.SecurityConfig;
 import com.example.concertticketingsystem.controller.ArtistController;
 import com.example.concertticketingsystem.controller.ConcertController;
 import com.example.concertticketingsystem.controller.VenueController;
@@ -17,18 +18,11 @@ import com.example.concertticketingsystem.service.VenueService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
-import org.springframework.security.config.Customizer;
-import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.test.context.support.WithMockUser;
-import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -44,7 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest({ArtistController.class, VenueController.class, ConcertController.class})
-@Import({ClockConfig.class, CatalogRolePreparationTests.TestMethodSecurity.class})
+@Import({ClockConfig.class, SecurityConfig.class})
 class CatalogRolePreparationTests {
 
     @Autowired
@@ -142,15 +136,4 @@ class CatalogRolePreparationTests {
                 + LocalDateTime.now().plusDays(30) + "\",\"unitPrice\":42.50}";
     }
 
-    // Configuration exclusivement de test : aucune activation dans l'application.
-    @TestConfiguration(proxyBeanMethods = false)
-    @EnableMethodSecurity
-    static class TestMethodSecurity {
-        @Bean
-        SecurityFilterChain testSecurityFilterChain(HttpSecurity http) throws Exception {
-            return http.csrf(AbstractHttpConfigurer::disable)
-                    .authorizeHttpRequests(requests -> requests.anyRequest().permitAll())
-                    .httpBasic(Customizer.withDefaults()).build();
-        }
-    }
 }

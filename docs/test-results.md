@@ -155,6 +155,9 @@ rôles utilisent `@WebMvcTest`, des services simulés et une sécurité de méth
 activée dans une `@TestConfiguration`. Ils ne valident pas la future configuration
 de sécurité de l’application, qui reste inchangée.
 
+Cette section décrit la validation historique de l’API avant l’activation de la
+sécurité. La validation de la véritable configuration est présentée ci-dessous.
+
 ### Observations et adaptations
 
 Aucun échec de test n’a été rencontré pendant cette intervention. Les repositories
@@ -167,3 +170,81 @@ Rapports : `target/surefire-reports`. Journal de vérification :
 `target/api-clean-verify.log`. Journaux du JAR : `target/api-startup*.log`.
 Les limites et avertissements non bloquants sont détaillés dans
 [ai-usage-log.md](ai-usage-log.md). Aucune capture d’écran n’a été réalisée.
+
+## Sécurité HTTP Basic, BCrypt et rôles — 21 octobre 2026
+
+### Exécutions réelles
+
+| Commande | Résultat attendu | Résultat obtenu |
+|---|---|---|
+| `.\mvnw.cmd -B "-Dtest=SecurityConfigTests,CatalogRolePreparationTests,CatalogApiTests" test` | Sécurité et API compatibles | `BUILD SUCCESS`, 85 tests, 0 échec, 0 erreur. |
+| `.\mvnw.cmd clean verify` | Compilation, ensemble des tests et JAR | `BUILD SUCCESS`, 132 tests, 0 échec, 0 erreur, 0 test ignoré. |
+
+| Classe JUnit | Tests | Échecs | Erreurs |
+|---|---:|---:|---:|
+| `ApplicationConfigurationTests` | 3 | 0 | 0 |
+| `CatalogApiTests` | 41 | 0 | 0 |
+| `CatalogPersistenceTests` | 36 | 0 | 0 |
+| `CatalogRolePreparationTests` | 6 | 0 | 0 |
+| `ConcertTicketingSystemApplicationTests` | 1 | 0 | 0 |
+| `ArtistTests` | 7 | 0 | 0 |
+| `SecurityConfigTests` | 38 | 0 | 0 |
+| **Total** | **132** | **0** | **0** |
+
+### Couverture de la sécurité
+
+- Routes publiques accessibles sans identifiants, y compris POST `/api/clients`.
+- Routes protégées sans identifiants : 401 avec challenge Basic et erreur JSON.
+- Mot de passe incorrect ou compte inconnu : 401.
+- Compte valide sans le bon rôle : 403, sans challenge trompeur de réauthentification.
+- CLIENT autorisé sur achats/cartes ; PRODUCTEUR autorisé sur artistes/concerts ;
+  ADMIN autorisé sur administration, production et cartes de fidélité.
+- ADMIN refusé sur les achats réservés à CLIENT ; les rôles restent distincts.
+- POST autorisés sans jeton CSRF, authentification Basic réelle avec les comptes
+  de démonstration et mots de passe stockés sous forme BCrypt.
+- Aucun cookie de session, aucune session créée, authentification absente à la
+  requête suivante et contexte d’authentification d’une session entrante ignoré.
+- Routes non répertoriées refusées, absence de redirection vers un formulaire HTML.
+
+`SecurityConfigTests` utilise des sondes HTTP de test pour les routes de la
+Personne B et Swagger. Ces tests valident les règles d’accès sans implémenter
+leurs controllers métier. `CatalogRolePreparationTests` utilise désormais la
+vraie `SecurityConfig` avec les controllers du catalogue et des services simulés.
+`CatalogApiTests` conserve ses tests métier avec filtres désactivés et un ADMIN
+simulé, nécessaire depuis l’activation de `@PreAuthorize`.
+
+### Erreurs et corrections
+
+Aucun échec de test n’a été observé pendant cette intervention. Les adaptations
+préventives ont consisté à fournir l’utilisateur ADMIN aux tests métier et à
+remplacer l’ancienne configuration de sécurité de test par la vraie configuration.
+Les avertissements non bloquants préexistants sont inchangés. Aucun test n’est
+déclaré réussi sans exécution.
+
+Les comptes et la procédure Postman sont documentés dans le README. La décision
+CSRF concerne une API sans cookie destinée aux clients explicites ; l’absence de
+session seule ne garantit pas une protection CSRF pour un navigateur HTTP Basic.
+Les rapports et journaux sont sous `target/surefire-reports`,
+`target/security-tests.log` et `target/security-clean-verify.log`.
+
+### Contrôle réseau du JAR hors IDE
+
+Le JAR généré par `clean verify` a été lancé avec les variables locales et un
+port temporaire. Les requêtes HTTP réelles suivantes ont été exécutées :
+
+| Requête | Compte | Résultat obtenu |
+|---|---|---|
+| GET `/api/concerts` | Aucun | 200 |
+| GET `/actuator/health` | Aucun | 200 |
+| GET `/api/concerts/9223372036854775807` | Aucun | 404 |
+| POST `/api/production/artistes` | Aucun | 401 |
+| POST `/api/admin/salles` | admin, mauvais mot de passe | 401 |
+| POST `/api/production/artistes` | client | 403 |
+| POST `/api/production/artistes`, corps `{}` | producteur | 400 : sécurité franchie, validation métier refusée |
+| POST `/api/admin/salles`, corps `{}` | admin | 400 : sécurité franchie, validation métier refusée |
+
+Les réponses 401 contiennent le challenge Basic et aucune réponse contrôlée ne
+crée de cookie de session. Aucun enregistrement métier n’a été ajouté. Le processus
+temporaire a été arrêté après le contrôle. Les journaux du démarrage sont
+`target/security-startup.log` et `target/security-startup-error.log`.
+La procédure Postman est documentée ; son interface n’a pas été exécutée.

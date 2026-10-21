@@ -240,6 +240,51 @@ class CatalogPersistenceTests {
         return artist;
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"name", "city"})
+    void databaseRejectsBlankVenueNamesAndCities(String field) {
+        assertThatThrownBy(() -> jdbc.update("INSERT INTO venues (name, city, capacity) VALUES (?, ?, ?)",
+                field.equals("name") ? " " : "Olympia", field.equals("city") ? " " : "Paris", 500))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("ck_venues_" + field + "_not_blank")
+                .rootCause().isInstanceOfSatisfying(SQLException.class,
+                        exception -> assertThat(exception.getErrorCode()).isEqualTo(3819));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"name", "city", "capacity"})
+    void databaseRejectsNullMandatoryVenueFields(String field) {
+        assertThatThrownBy(() -> jdbc.update("INSERT INTO venues (name, city, capacity) VALUES (?, ?, ?)",
+                field.equals("name") ? null : "Olympia", field.equals("city") ? null : "Paris",
+                field.equals("capacity") ? null : 500))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining(field);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"artist", "venue"})
+    void databasePreventsDeletingReferencedCatalogEntities(String reference) {
+        Artist artist = persistArtist();
+        Venue venue = persistVenue();
+        entityManager.persist(new Concert("Jazz Night", artist, venue, futureDate(), new BigDecimal("42.50")));
+        entityManager.flush();
+        String table = reference.equals("artist") ? "artists" : "venues";
+        Long id = reference.equals("artist") ? artist.getId() : venue.getId();
+        assertThatThrownBy(() -> jdbc.update("DELETE FROM " + table + " WHERE id = ?", id))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("fk_concerts_" + reference);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0.01", "99999999.99"})
+    void persistsExactPriceAtDecimalLimits(String price) {
+        Concert concert = new Concert("Jazz Night", persistArtist(), persistVenue(), futureDate(),
+                new BigDecimal(price));
+        entityManager.persist(concert);
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(entityManager.find(Concert.class, concert.getId()).getUnitPrice()).isEqualByComparingTo(price);
+    }
+
     private Venue persistVenue() {
         Venue venue = new Venue("Olympia", "Paris", 500);
         entityManager.persist(venue);

@@ -290,7 +290,7 @@ par la validation Java.
 
 ### 4. Utilisation de l’IA
 
-Outil : Codex. Modèle : GPT-6. Niveau de raisonnement exact non communiqué.
+Outil : Codex. Modèle : GPT-6. Niveau de raisonnement: instant.
 Prompt reçu en français :
 
 ```text
@@ -437,7 +437,7 @@ une `@TestConfiguration`, sans effet sur l’application livrée.
 
 ### 4. Utilisation de l’IA
 
-Outil : Codex. Modèle : GPT-6. Niveau de raisonnement exact non communiqué.
+Outil : Codex. Modèle : GPT-6. Niveau de raisonnement: instant.
 Prompt initial reçu en français :
 
 ```text
@@ -528,3 +528,266 @@ L’intégration de la sécurité reste à effectuer dans sa branche : activatio
 sécurité de méthode, authentification et règles HTTP publiques/privées. Les tests
 de préparation des rôles ne remplacent pas la validation de cette future
 configuration. Les filtres et les exemples de requête sont décrits dans le README.
+
+## Sécurité Spring Security, HTTP Basic et BCrypt
+
+Date : 21 octobre 2026.
+
+### 1. Objectif
+
+Activer l’authentification HTTP Basic, les rôles CLIENT/PRODUCTEUR/ADMIN et les
+comptes de démonstration, conserver une API stateless et retourner 401/403 de
+manière cohérente. Préparer les routes de la Personne B sans modifier son code.
+
+### 2. Démarche et raisonnement
+
+`SecurityConfig` définit un `BCryptPasswordEncoder`, un `UserDetailsService` en
+mémoire et une `SecurityFilterChain`. Les mots de passe de démonstration sont
+encodés avant création des comptes ; le gestionnaire conserve uniquement les
+empreintes BCrypt. Les comptes sont `client`, `producteur` et `admin`, avec un
+seul rôle chacun. Les variables `DEMO_CLIENT_PASSWORD`, `DEMO_PRODUCTEUR_PASSWORD`
+et `DEMO_ADMIN_PASSWORD` permettent de remplacer les valeurs publiques de démo.
+Le tableau des identifiants et la procédure Postman sont dans le README.
+
+La chaîne HTTP autorise les lectures du catalogue, l’inscription client, la santé
+et Swagger sans authentification. Les achats sont réservés à CLIENT, les cartes
+de fidélité à CLIENT ou ADMIN, la production à PRODUCTEUR ou ADMIN et les routes
+`/api/admin/**` à ADMIN. Les autres routes sont refusées. ADMIN n’hérite pas
+implicitement de CLIENT : ses autorisations supplémentaires sont explicites.
+`@EnableMethodSecurity` active également les annotations existantes du catalogue.
+
+`SessionCreationPolicy.STATELESS`, `NullSecurityContextRepository` et la
+désactivation du cache de requêtes évitent de conserver l’authentification en
+session. Le formulaire de connexion et le logout de session sont désactivés.
+Les refus 401 fournissent le challenge `WWW-Authenticate: Basic` ; les refus 403
+indiquent un rôle insuffisant. Les deux utilisent le DTO `ApiError`, sans fuite
+d’identifiants ni de détails internes. Les redistributions d’erreur du conteneur
+sont autorisées pour préserver les codes d’erreur applicatifs comme 404.
+
+CSRF est désactivé pour l’API REST destinée aux clients explicites tels que
+Postman, sans cookie d’authentification ni formulaire. Stateless seul ne protège
+pas contre CSRF ; une utilisation future dans un navigateur envoyant
+automatiquement des identifiants Basic nécessite de revoir ce choix.
+
+### 3. Documentation utilisée
+
+- [Spring Security — Basic Authentication](https://docs.spring.io/spring-security/reference/7.0/servlet/authentication/passwords/basic.html) :
+  filtre Basic, `AuthenticationEntryPoint` et challenge HTTP.
+- [Spring Security — In-Memory Authentication](https://docs.spring.io/spring-security/reference/7.0/servlet/authentication/passwords/in-memory.html) :
+  utilisateurs en mémoire et stockage de mots de passe encodés.
+- [Spring Security — Session Management](https://docs.spring.io/spring-security/reference/7.0/servlet/authentication/session-management.html) :
+  HTTP Basic stateless et `SessionCreationPolicy.STATELESS`.
+- [Spring Security — CSRF](https://docs.spring.io/spring-security/reference/7.0/servlet/exploits/csrf.html) :
+  comportement par défaut et choix adapté au mode de consommation de l’API.
+- [Spring Security — CSRF et applications stateless](https://docs.spring.io/spring-security/reference/7.1-SNAPSHOT/features/exploits/csrf.html) :
+  vulnérabilité possible des navigateurs utilisant HTTP Basic malgré l’absence de session.
+- [Conventions du projet](CONVENTIONS.md) : rôles, routes et format d’erreur.
+
+### 4. Utilisation de l’IA
+
+Outil : Codex. Modèle : GPT-6. Niveau de raisonnement: instant.
+Prompt reçu en français, renvoyé pendant l’intervention :
+
+```text
+implémente la sécurité de l'application Concert Ticketing System avec Spring Security, HTTP Basic et BCrypt, en respectant l'architecture existante.
+
+Crée une configuration SecurityConfig avec trois comptes de démonstration ayant les rôles CLIENT, PRODUCTEUR et ADMIN. Les mots de passe doivent être encodés avec BCrypt et les identifiants de démonstration doivent être clairement documentés.
+
+Configure les autorisations suivantes :
+
+PUBLIC : GET /api/concerts, GET /api/concerts/{id}, POST /api/clients, /actuator/health et la documentation Swagger.
+
+CLIENT : POST /api/achats et POST /api/clients/{id}/carte-fidelite.
+
+PRODUCTEUR : POST /api/production/artistes et POST /api/production/concerts.
+
+ADMIN : POST /api/admin/salles, ainsi que les opérations réservées à l'administration.
+
+L'administrateur doit également pouvoir accéder aux fonctionnalités du producteur et à la création des cartes de fidélité.
+
+Ajoute des tests automatisés avec JUnit, MockMvc et Spring Security Test pour vérifier qu'un utilisateur non authentifié reçoit 401 Unauthorized lorsqu'il accède à une ressource protégée, qu'un utilisateur authentifié sans le rôle requis reçoit 403 Forbidden, et qu'un utilisateur autorisé peut accéder aux endpoints correspondants.
+
+Assure-toi que l'API reste stateless, que les erreurs d'authentification et d'autorisation retournent les bons codes HTTP et que la configuration HTTP Basic fonctionne avec Postman. Prends également en compte la configuration CSRF adaptée à cette API REST.
+
+Ne modifie pas inutilement le code de la Personne B. Exécute .\mvnw.cmd clean verify, corrige les erreurs rencontrées et documente les tests, les bugs, les corrections
+```
+
+Propositions retenues : comptes mémoire BCrypt, droits explicites sans hiérarchie
+globale, sécurité de méthode active, erreurs JSON 401/403 et absence de session.
+Les adaptations de tests sont décrites ci-dessous. Aucune modification manuelle
+de l’utilisateur n’a été observée pendant cette intervention.
+
+### 5. Tests et vérifications
+
+La sélection `SecurityConfigTests,CatalogRolePreparationTests,CatalogApiTests`
+a été exécutée : 85 tests réussis. La commande `.\mvnw.cmd clean verify` a ensuite
+réussi : 132 tests, aucun échec, aucune erreur, aucun test ignoré.
+
+`SecurityConfigTests` contient 38 cas couvrant les routes publiques, 401 sans
+identifiants, 401 pour des identifiants incorrects, 403 sans le rôle requis,
+les accès autorisés, les droits supplémentaires d’ADMIN, l’absence de jeton
+CSRF exigé, les empreintes BCrypt et l’absence de réutilisation de session.
+Les tests des rôles du catalogue importent maintenant la vraie `SecurityConfig`.
+
+Les routes métier de la Personne B et Swagger sont représentées par des sondes
+de contrôleur exclusivement dans les tests : cela vérifie leurs règles HTTP,
+sans prétendre que leurs fonctionnalités métier ou leur documentation existent
+dans cette branche. Les comptes réels sont testés avec le postprocesseur
+`httpBasic`, tandis que les tests de rôle du catalogue utilisent aussi
+`@WithMockUser` pour isoler les décisions d’autorisation.
+
+Le JAR a ensuite été démarré hors IDE et contrôlé avec de vraies requêtes HTTP :
+lectures publiques 200, concert absent 404, écriture anonyme 401, mauvais mot de
+passe 401 et CLIENT sur une création d’artiste 403. Avec les bons comptes
+PRODUCTEUR et ADMIN, les écritures ont atteint la validation métier et renvoyé
+400 pour le corps volontairement vide `{}`. Ce contrôle ne crée aucune donnée.
+Les challenges Basic et l’absence de cookie ont été vérifiés ; le processus
+temporaire a été arrêté et son arrêt confirmé. Les créations 201 sont couvertes
+par les tests MockMvc décrits précédemment. L’interface Postman n’a pas été utilisée.
+
+### 6. Problèmes rencontrés et adaptations
+
+Aucun échec de test n’a été rencontré dans les deux exécutions de cette tâche.
+L’activation de la sécurité de méthode a nécessité d’ajouter un utilisateur
+ADMIN simulé aux tests API qui désactivent les filtres HTTP. Leur configuration
+antérieure ne fournissait aucun utilisateur, car les annotations n’étaient pas
+encore actives dans l’application. Cette adaptation a été faite avant exécution.
+
+La configuration de sécurité permissive réservée aux tests des rôles a été
+remplacée par l’import de la configuration réelle. Les avertissements Maven
+préexistants (dépôts secondaires HTTP 401, TestNG `RELEASE`), Thymeleaf et
+Mockito restent non bloquants. Le refus `invalid-zone` est volontaire dans le
+test de configuration existant. Aucune capture d’écran n’a été réalisée.
+
+### 7. Traçabilité
+
+Fichiers ajoutés : `config/SecurityConfig.java` et `SecurityConfigTests.java`.
+Fichiers adaptés : `CatalogApiTests.java`, `CatalogRolePreparationTests.java`,
+README, `docs/ai-usage-log.md` et `docs/test-results.md`. Aucun controller, service,
+repository, schéma ou fichier métier de la Personne B n’a été modifié.
+Commit de cette tâche : non créé. Pull Request : non créée.
+
+### 8. Conclusion
+
+La sécurité HTTP et de méthode est active et les 132 tests passent. Les comptes
+publics de démonstration sont documentés avec des variables de remplacement.
+Les fonctionnalités clients/achats/cartes et l’implémentation Swagger restent
+dépendantes de leur intégration ; seules leurs règles d’accès sont préparées ici.
+La procédure Postman est documentée ; les contrôles réseau automatisés utilisent
+des requêtes HTTP équivalentes, sans prétendre avoir exécuté l’interface Postman.
+
+## Swagger/OpenAPI, Actuator et README technique
+
+Date : 21 octobre 2026.
+
+### 1. Objectif
+
+Fournir une véritable interface Swagger et un document OpenAPI fidèle aux cinq
+endpoints du catalogue, vérifier `/actuator/health`, compléter les tests JPA et
+HTTP, revérifier la sécurité et rédiger un README technique en français.
+
+### 2. Démarche et raisonnement
+
+La sécurité autorisait déjà les chemins Swagger, mais aucune bibliothèque ne
+servait la documentation. Le starter `springdoc-openapi-starter-webmvc-ui:3.1.1`
+a été ajouté ; il correspond à la génération Spring Boot 4. `OpenApiConfig`
+définit les informations de l’API et le schéma HTTP Basic. Les controllers portent
+les tags, descriptions d’opération, paramètres et réponses HTTP ; les DTO portent
+les descriptions, exemples et contraintes de schéma. Les lectures restent publiques
+dans le document ; les créations déclarent le besoin d’authentification Basic.
+
+Les filtres `du`, `au` et `artiste` décrivent des dates ISO inclusives et un
+identifiant d’artiste. Les schémas précisent les champs obligatoires, les bornes
+de capacité, le prix au centime, les références existantes et la date future.
+Les réponses documentent les DTO, erreurs 400/401/403/404/409 et l’en-tête
+`Location` du concert créé. Le type de réponse des controllers du catalogue
+est explicitement `application/json`.
+
+Le JSON OpenAPI est exposé sur `/v3/api-docs`, le YAML sur `/v3/api-docs.yaml`
+et Swagger UI sur `/swagger-ui.html`. Le chemin YAML est ajouté aux lectures
+publiques de `SecurityConfig`. La persistance des identifiants dans Swagger UI
+est désactivée. `springdoc.show-actuator=true` inclut les endpoints de santé.
+Actuator conserve uniquement `health` exposé, ses sondes et les détails masqués.
+
+Le README a été réécrit autour du périmètre réellement disponible, sans présenter
+les achats/fidélité de la Personne B comme implémentés. Il décrit l’architecture,
+les prérequis, Docker, les variables, Flyway, les routes, Swagger, HTTP Basic et
+les commandes de test. La procédure PowerShell reprend la configuration résolue
+par Compose afin de respecter les mots de passe et le port local sans les afficher.
+
+### 3. Documentation utilisée
+
+- [springdoc-openapi 3.1.1](https://springdoc.org/) : installation Web MVC,
+  informations OpenAPI/sécurité, configuration Swagger UI et support Actuator.
+- [Spring Boot — Endpoints Actuator](https://docs.spring.io/spring-boot/reference/actuator/endpoints.html) :
+  exposition de santé, détails et sondes.
+- Les conventions et fichiers existants du projet : V1, DTO records, erreurs HTTP,
+  sécurité, tests MockMvc et JPA/Testcontainers.
+
+### 4. Utilisation de l’IA
+
+Outil : Codex. Modèle : GPT-6. Niveau de raisonnement exact non communiqué.
+Prompt reçu en français :
+
+```text
+onfigure et vérifie Swagger/OpenAPI pour documenter les endpoints REST du catalogue (artistes, salles et concerts), ainsi que Spring Boot Actuator avec l'endpoint /actuator/health. Assure-toi que Swagger est accessible et que les réponses HTTP, les DTO et les paramètres de filtrage sont correctement documentés.
+
+Complète les tests automatisés JUnit, MockMvc et JPA avec Testcontainers MySQL pour vérifier la persistance des entités, les contraintes SQL, les relations JPA, les endpoints GET et POST, les filtres, les validations et les réponses HTTP (200, 201, 400, 404 et 409). Vérifie également les tests de sécurité 401 et 403 déjà développés dans la branche précédente.
+
+Rédige un README technique professionnel expliquant l'architecture, les technologies, les prérequis, la configuration Docker/MySQL, le démarrage de l'application, les migrations Flyway, les endpoints disponibles, l'accès à Swagger et les commandes pour exécuter les tests.
+```
+
+Propositions retenues : springdoc 3 compatible Boot 4, annotations du contrat
+réel, véritable Swagger dans les tests et parcours sécurisé complet avec MySQL.
+Aucune modification manuelle de l’utilisateur n’a été observée pendant cette tâche.
+
+### 5. Tests et vérifications
+
+La compilation avec le nouveau starter a réussi. Une première sélection de
+`CatalogPersistenceTests,OpenApiAndHealthTests` a exécuté 57 cas, sans échec ni
+erreur : 45 tests JPA/SQL et 12 tests de documentation, santé et parcours HTTP.
+La vérification finale ajoute également un contrôle de présence de la santé dans
+OpenAPI et des assertions sur les références de schémas JSON.
+Les résultats de `.\mvnw.cmd clean verify` sont consignés dans
+[test-results.md](test-results.md).
+
+Les ajouts JPA couvrent les champs SQL obligatoires/vides des salles, l’interdiction
+de supprimer un artiste ou une salle référencés et la conservation exacte des
+prix aux bornes `0.01`/`99999999.99`. Les tests précédents de relations, unicités,
+capacités, validations et clés étrangères sont conservés.
+
+La nouvelle suite utilise MockMvc avec la vraie chaîne de sécurité et un MySQL
+8.4/Testcontainers. Elle teste l’interface Swagger, ses ressources et sa configuration,
+les formats JSON/YAML, les chemins, filtres, DTO, codes et droits documentés,
+les véritables sondes de santé et les créations Basic PRODUCTEUR/ADMIN avec
+lecture publique et doublons 409. Elle vérifie aussi 401/403/400/404 sans remplacer
+les controllers par des sondes. Les tests de sécurité antérieurs sont conservés.
+
+### 6. Problèmes rencontrés et adaptations
+
+Swagger était autorisé mais absent : ajout du starter, sans création d’un faux
+endpoint de documentation. Le YAML avait un chemin distinct des règles existantes :
+il est désormais explicitement public. Le README précédent mélangeait plusieurs
+langues et des étapes devenues obsolètes ; il a été remplacé par une procédure
+technique en français cohérente avec la configuration actuelle.
+
+La première sélection de tests a réussi. Les avertissements préexistants relatifs
+aux dépôts secondaires, TestNG, Thymeleaf et Mockito restent distincts des
+vérifications fonctionnelles. Aucune capture d’écran n’a été réalisée.
+
+### 7. Traçabilité
+
+Fichiers concernés : POM, `OpenApiConfig`, annotations des controllers et DTO,
+configuration springdoc, règle publique YAML, tests JPA, `OpenApiAndHealthTests`,
+README et journaux de suivi. V1 et les entités ne sont pas modifiées.
+Le travail métier de la Personne B est conservé. Les modifications de sécurité
+de l’intervention précédente restent présentes.
+Commit de cette tâche : non créé. Pull Request : non créée.
+
+### 8. Conclusion
+
+La documentation Swagger est fournie par springdoc et vérifiée par des tests
+sur les véritables ressources. Le README décrit les commandes et limites du
+périmètre actuel. Les tests n’implémentent pas les fonctionnalités encore
+réservées à la Personne B. Les résultats finaux et limites des vérifications
+sont consignés dans `docs/test-results.md`.
