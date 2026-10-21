@@ -248,3 +248,109 @@ crée de cookie de session. Aucun enregistrement métier n’a été ajouté. Le
 temporaire a été arrêté après le contrôle. Les journaux du démarrage sont
 `target/security-startup.log` et `target/security-startup-error.log`.
 La procédure Postman est documentée ; son interface n’a pas été exécutée.
+
+## Intégration A/B sur develop — 21 octobre 2026
+
+État initial : branche `develop`, commit `d785b09`, espace de travail Git propre.
+Aucune branche n’a été créée ni fusionnée pendant l’intervention.
+
+| Exécution | Résultat réellement obtenu |
+|---|---|
+| `docker compose up -d` puis `docker compose ps` | MySQL 8.4 en cours d’exécution, `healthy`, port `127.0.0.1:3307`. |
+| `.\mvnw.cmd clean verify`, bilan avant correction | Échec : 163 tests exécutés, 100 erreurs de contexte ; `ConcertAvailabilityGateway` sans bean d’implémentation. |
+| `.\mvnw.cmd -B "-Dtest=TicketingIntegrationTests,TicketingConcurrencyTests,LoyaltyCardServiceTest" test` | `BUILD SUCCESS` : 24 tests, 0 échec, 0 erreur. |
+| `.\mvnw.cmd clean verify`, vérification finale | `BUILD SUCCESS` : 199 tests, 0 échec, 0 erreur, 0 test ignoré. |
+| `git diff --check` | Code de sortie 0. |
+| Diff Git sur les scripts V1 et V2 | Aucun changement ; V3 ajoutée pour les ajustements d’intégration. |
+
+### Répartition finale
+
+| Classe | Tests | Échecs | Erreurs |
+|---|---:|---:|---:|
+| `ApplicationConfigurationTests` | 3 | 0 | 0 |
+| `CatalogApiTests` | 41 | 0 | 0 |
+| `CatalogPersistenceTests` | 45 | 0 | 0 |
+| `CatalogRolePreparationTests` | 6 | 0 | 0 |
+| `ConcertTicketingSystemApplicationTests` | 1 | 0 | 0 |
+| `ArtistTests` | 7 | 0 | 0 |
+| `OpenApiAndHealthTests` | 13 | 0 | 0 |
+| `SecurityConfigTests` | 38 | 0 | 0 |
+| `CustomerServiceTest` | 2 | 0 | 0 |
+| `LoyaltyCardServiceTest` | 3 | 0 | 0 |
+| `TicketPricingServiceTest` | 4 | 0 | 0 |
+| `TicketPurchaseServiceTest` | 5 | 0 | 0 |
+| `TicketingConcurrencyTests` | 6 | 0 | 0 |
+| `TicketingIntegrationTests` | 25 | 0 | 0 |
+| **Total** | **199** | **0** | **0** |
+
+### Concurrence MySQL et atomicité
+
+Le scénario exigé est exécuté trois fois dans `TicketingConcurrencyTests` :
+
+- Salle de 50 places ; achats existants totalisant 45 places, committés avant les threads.
+- Deux threads démarrés avec une barrière, demandant chacun quatre billets.
+- Exactement un achat validé et un refus `BusinessConflictException` avec code `JAUGE_INSUFFISANTE`.
+- Total SQL final : 49 places vendues ; neuf lignes d’achat au lieu de huit.
+- Une place restante et aucune écriture du second achat refusé.
+
+Les autres cas vérifient une seule carte active après deux créations simultanées,
+l’attente réelle d’un verrou détenu par une autre transaction et l’interdiction
+du gateway hors transaction. Il s’agit de MySQL/Testcontainers et de transactions
+réelles, sans mock ni transaction de test globale autour des threads.
+
+### Parcours intégrés et SQL
+
+Les 25 cas REST/JPA/formulaires valident V1 → V2 → V3 avec `ddl-auto=validate`,
+l’adresse embarquée, les relations achat/client/concert/salle après relecture,
+l’inscription publique et les doublons d’email, la création et le renouvellement
+des cartes, leur date d’expiration exclusive et les cartes futures non actives.
+
+Les achats sont vérifiés avec et sans remise, jusqu’à épuisement exact de capacité,
+avec refus sans écriture supplémentaire. Le total maximal de six billets
+`599999999.94` est persisté sans débordement. Les concerts commencés sont refusés.
+Les cas SQL directs vérifient unicité d’email, clés étrangères, quantités 0/7,
+totaux zéro/négatifs et période de carte invalide.
+
+Les codes REST 201/400/404/409 et de sécurité 401/403 sont vérifiés avec les vrais
+controllers, services et filtres. Les formulaires Thymeleaf restent fonctionnels :
+CSS public, création client, carte et achat, refus sans CSRF et acceptation du
+véritable couple jeton/cookie rendu par la page.
+
+### Contrôle du JAR sur le MySQL Compose
+
+Le JAR issu du build final a été lancé hors IDE sur un port temporaire avec la
+configuration résolue de Compose. Migrations et connexion MySQL ont réussi.
+
+| Requête réelle | Résultat |
+|---|---|
+| GET santé, JSON OpenAPI et Swagger UI | 200 ; santé `UP`, route `/api/achats` présente dans OpenAPI. |
+| POST artiste PRODUCTEUR, salle ADMIN et concert PRODUCTEUR | 201 pour les trois créations. |
+| POST inscription client sans compte Basic | 201. |
+| POST carte avec ADMIN | 201. |
+| POST achat CLIENT, quatre billets à 50 avec carte active | 201 ; total `180.00`, remise `0.10`, places restantes `46`. |
+| Deuxième demande de carte active | 409. |
+| Achat sans authentification | 401. |
+| Achat avec PRODUCTEUR | 403. |
+| Lecture publique du concert créé | 200. |
+
+Le processus temporaire a été arrêté et seules ses lignes de test ont été
+nettoyées, par leurs identifiants/codes connus et dans une transaction SQL.
+MySQL Compose reste actif. Aucun enregistrement antérieur n’a été supprimé.
+
+### Corrections justifiées et limites
+
+Le gateway manquant et le repository verrouillé raccordent les contrats A/B.
+L’isolation READ_COMMITTED évite un SUM basé sur un instantané antérieur à l’attente
+du verrou. Le client est verrouillé pour les cartes concurrentes. V3 élargit le
+total et ajoute des CHECK sans réécrire V1/V2. Les erreurs B sont intégrées au
+format commun et les formulaires sont protégés par CSRF, avec API stateless.
+La dépendance TestNG inutilisée a été supprimée ; tous les tests restent JUnit.
+
+Les limites de démonstration des comptes en mémoire et de leur absence de liaison
+personnelle à un client métier sont documentées. Les messages du test de fuseau
+invalide sont attendus ; les avertissements Maven secondaires/Mockito sont non
+bloquants. Aucune capture d’écran n’a été réalisée.
+
+Journaux : `target/integration-baseline.log`, `target/integration-targeted.log`,
+`target/integration-clean-verify.log`, `target/integration-startup*.log` et
+rapports `target/surefire-reports`.

@@ -7,8 +7,8 @@ services:
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-concert_ticketing}
       MYSQL_USER: ${MYSQL_USER:-concert_app}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Definir MYSQL_PASSWORD dans .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Definir MYSQL_ROOT_PASSWORD dans .env}
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:

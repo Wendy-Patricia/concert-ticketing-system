@@ -10,8 +10,11 @@ import com.example.concertticketingsystem.repository.CustomerRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.annotation.Validated;
+import jakarta.validation.Valid;
 
 @Service
+@Validated
 public class CustomerService {
 
     private final CustomerRepository customerRepository;
@@ -21,7 +24,7 @@ public class CustomerService {
     }
 
     @Transactional
-    public CustomerResponse createCustomer(CustomerRequest request) {
+    public CustomerResponse createCustomer(@Valid CustomerRequest request) {
 
         if (customerRepository.existsByEmail(request.email())) {
             throw new BusinessConflictException(

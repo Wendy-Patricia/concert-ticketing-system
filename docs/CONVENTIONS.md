@@ -128,7 +128,9 @@ Les tables et colonnes utilisent `snake_case`, en anglais.
 
 - Personne A : `V1__create_catalog.sql` — artists, venues, concerts.
 - Personne B : `V2__create_ticketing.sql` — customers, loyalty_cards, ticket_purchases.
-- Personne A : `V3__insert_demo_data.sql` — données de démonstration.
+- Intégration develop : `V3__integrate_ticketing_constraints.sql` — total d’achat
+  `DECIMAL(12,2)`, total positif et période de carte valide. L’ancienne réservation
+  des données de démonstration n’avait pas de script ; utiliser une version ultérieure.
 
 Les migrations déjà appliquées ne doivent pas être modifiées.
 

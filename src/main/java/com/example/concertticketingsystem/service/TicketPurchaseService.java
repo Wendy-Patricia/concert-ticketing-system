@@ -13,6 +13,9 @@ import com.example.concertticketingsystem.repository.TicketPurchaseRepository;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.validation.annotation.Validated;
+import jakarta.validation.Valid;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -21,6 +24,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
+@Validated
 public class TicketPurchaseService {
 
     private final TicketPurchaseRepository purchaseRepository;
@@ -46,9 +50,10 @@ public class TicketPurchaseService {
         this.clock = clock;
     }
 
-    @Transactional
+    // Apres l'attente du verrou, SUM doit voir les achats qui viennent d'etre valides.
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public TicketPurchaseResponse purchase(
-            TicketPurchaseRequest request) {
+            @Valid TicketPurchaseRequest request) {
 
         if (request.concertId() == null ||
                 request.customerId() == null ||
@@ -63,11 +68,10 @@ public class TicketPurchaseService {
         Customer customer = customerRepository
                 .findById(request.customerId())
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Client introuvable"
+                        "CLIENT_INTROUVABLE", "Client introuvable"
                 ));
 
-        // Na integração, este método deve bloquear
-        // a linha do concerto na base MySQL.
+        // Le gateway garde le verrou du concert jusqu'au commit de cet achat.
         ConcertAvailabilityGateway.ConcertInfo concert =
                 concertGateway.findAndLockConcert(
                         request.concertId()
@@ -75,7 +79,7 @@ public class TicketPurchaseService {
 
         if (concert == null) {
             throw new ResourceNotFoundException(
-                    "Concert introuvable"
+                    "CONCERT_INTROUVABLE", "Concert introuvable"
             );
         }
 
@@ -87,7 +91,7 @@ public class TicketPurchaseService {
 
         if (remaining < request.quantity()) {
             throw new BusinessConflictException(
-                    "JAUGE_INSUFFISANTE : places insuffisantes"
+                    "JAUGE_INSUFFISANTE", "Places insuffisantes pour cet achat."
             );
         }
 

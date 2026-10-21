@@ -10,9 +10,16 @@ import com.example.concertticketingsystem.service.TicketPurchaseService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import com.example.concertticketingsystem.exception.BusinessConflictException;
+import com.example.concertticketingsystem.exception.ResourceNotFoundException;
+import jakarta.validation.ConstraintViolationException;
 
 @Controller
 public class TicketingPageController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(TicketingPageController.class);
 
     private final CustomerService customerService;
     private final LoyaltyCardService loyaltyCardService;
@@ -50,7 +57,7 @@ public class TicketingPageController {
                     "Client créé avec succès ! ID : " + result.id());
 
         } catch (RuntimeException ex) {
-            model.addAttribute("error", ex.getMessage());
+            displayError(model, ex);
         }
 
         return "customer-form";
@@ -74,7 +81,7 @@ public class TicketingPageController {
                             + result.expiresAt());
 
         } catch (RuntimeException ex) {
-            model.addAttribute("error", ex.getMessage());
+            displayError(model, ex);
         }
 
         return "loyalty-form";
@@ -104,9 +111,19 @@ public class TicketingPageController {
                             + " | Total : " + result.totalAmount() + " €");
 
         } catch (RuntimeException ex) {
-            model.addAttribute("error", ex.getMessage());
+            displayError(model, ex);
         }
 
         return "purchase-form";
+    }
+
+    private void displayError(Model model, RuntimeException exception) {
+        if (exception instanceof BusinessConflictException || exception instanceof ResourceNotFoundException
+                || exception instanceof IllegalArgumentException || exception instanceof ConstraintViolationException) {
+            model.addAttribute("error", exception.getMessage());
+        } else {
+            LOGGER.error("Echec d'une operation de billetterie", exception);
+            model.addAttribute("error", "Opération impossible. Veuillez réessayer.");
+        }
     }
 }

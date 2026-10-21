@@ -5,11 +5,13 @@ import com.example.concertticketingsystem.dto.response.LoyaltyCardResponse;
 import com.example.concertticketingsystem.entity.Customer;
 import com.example.concertticketingsystem.entity.LoyaltyCard;
 import com.example.concertticketingsystem.exception.BusinessConflictException;
+import com.example.concertticketingsystem.exception.ResourceNotFoundException;
 import com.example.concertticketingsystem.repository.CustomerRepository;
 import com.example.concertticketingsystem.repository.LoyaltyCardRepository;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -31,13 +33,13 @@ public class LoyaltyCardService {
         this.clock = clock;
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public LoyaltyCardResponse purchaseCard(Long customerId) {
 
-        Customer customer = customerRepository.findById(customerId)
+        Customer customer = customerRepository.findByIdForUpdate(customerId)
                 .orElseThrow(() ->
-                        new IllegalArgumentException(
-                                "Client introuvable : " + customerId
+                        new ResourceNotFoundException(
+                                "CLIENT_INTROUVABLE", "Client introuvable : " + customerId
                         )
                 );
 
@@ -50,7 +52,7 @@ public class LoyaltyCardService {
 
         if (hasActiveCard) {
             throw new BusinessConflictException(
-                    "Le client possède déjà une carte de fidélité active"
+                    "CARTE_DEJA_ACTIVE", "Le client possède déjà une carte de fidélité active"
             );
         }
 

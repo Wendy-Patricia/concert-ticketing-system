@@ -44,7 +44,7 @@ class LoyaltyCardServiceTest {
 
         Customer customer = mock(Customer.class);
 
-        when(customerRepository.findById(1L))
+        when(customerRepository.findByIdForUpdate(1L))
                 .thenReturn(Optional.of(customer));
 
         when(cardRepository.save(any(LoyaltyCard.class)))
@@ -70,7 +70,7 @@ class LoyaltyCardServiceTest {
 
         Customer customer = mock(Customer.class);
 
-        when(customerRepository.findById(1L))
+        when(customerRepository.findByIdForUpdate(1L))
                 .thenReturn(Optional.of(customer));
 
         when(cardRepository

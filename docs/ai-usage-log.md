@@ -791,3 +791,198 @@ sur les véritables ressources. Le README décrit les commandes et limites du
 périmètre actuel. Les tests n’implémentent pas les fonctionnalités encore
 réservées à la Personne B. Les résultats finaux et limites des vérifications
 sont consignés dans `docs/test-results.md`.
+
+## Intégration complète des modules A et B sur develop
+
+Date : 21 octobre 2026. Branche vérifiée avant modification : `develop`.
+Commit de départ : `d785b09` (fusion de `personne-b` dans `develop`).
+L’état Git initial était propre. Aucune branche n’a été créée ni fusionnée.
+
+### 1. Objectif
+
+Intégrer le catalogue et la billetterie réels, conserver leurs fonctionnalités,
+valider les migrations et la sécurité, empêcher la survente concurrente et
+vérifier le JAR contre le MySQL démarré par Docker Compose.
+
+### 2. Démarche et raisonnement
+
+L’analyse a couvert les entités, DTO, repositories, services, controllers REST
+et Thymeleaf, migrations, sécurité, POM et tests des deux modules. Les défauts
+constatés étaient : gateway d’accès au concert sans implémentation, absence de
+`findByIdForUpdate`, référence scalaire sans navigation JPA vers le concert,
+gestion des erreurs limitée au catalogue, client absent traité comme un argument
+invalide lors d’une demande de carte, formulaires refusés par la chaîne de sécurité,
+validation Java désalignée de certaines longueurs V2 et précision du total
+insuffisante pour six billets au prix maximal.
+
+Les corrections préservent le contrat `ConcertAvailabilityGateway` de B et ajoutent
+son adaptateur JPA. Celui-ci appelle le repository de A avec `PESSIMISTIC_WRITE`
+et impose une transaction existante (`MANDATORY`). La transaction d’achat garde
+ce verrou jusqu’au commit, compte les ventes ensuite et écrit l’achat atomiquement.
+Le niveau `READ_COMMITTED` évite qu’un premier SELECT client, exécuté avant
+l’attente du verrou, fige un ancien instantané `REPEATABLE_READ` pour le SUM.
+Ce risque a été identifié par analyse ; il n’a pas été présenté comme un test
+exécuté avant correction puisque le gateway manquait alors.
+
+La création d’une carte verrouille le client et utilise aussi `READ_COMMITTED`,
+pour sérialiser les demandes concurrentes. Le calcul original de B est conservé :
+10 % avec une carte active, aucune remise sinon, arrondi `HALF_UP` à deux décimales,
+quantité entre 1 et 6. Une carte expire à sa borne supérieure exclusive.
+Un concert commencé est refusé lors de l’achat.
+
+`TicketPurchase` conserve son constructeur et son identifiant de concert pour
+compatibilité avec le contrat existant ; une association JPA en lecture sur la
+même colonne `concert_id` permet de naviguer vers `Concert`. Il n’y a ni colonne
+dupliquée ni réécriture du schéma pour cette relation. Les tests relisent le lien
+avec le concert, sa salle et le client après `flush/clear`.
+
+V1 et V2 sont conservées sans modification. La nouvelle V3 élargit le total en
+`DECIMAL(12,2)` pour accepter six fois `99999999.99`, impose un total positif et une
+période de carte strictement croissante. La réservation documentaire V3 pour des
+données de démonstration n’avait pas de script ; les futures données devront
+prendre une version ultérieure. `ddl-auto=validate` reste actif.
+
+L’advice existant est étendu aux trois controllers REST de B, avec les mêmes
+erreurs JSON et codes 400/404/409. Les constructeurs d’exception existants sont
+préservés et complétés par des codes métier. Les DTO et colonnes Java sont alignés
+sur les longueurs SQL de V2. Les services valident aussi les demandes venant
+des formulaires, qui ne passent pas par le `@Valid` d’un controller REST.
+
+La sécurité Basic/BCrypt et les rôles REST sont conservés. Les pages Thymeleaf
+et leur CSS sont rendus accessibles selon les mêmes droits. Les formulaires
+utilisent un jeton CSRF en cookie et un champ caché ; seuls les chemins REST
+`/api/**` sont exemptés. Aucun contournement global de sécurité n’est introduit.
+Les erreurs techniques des formulaires n’affichent plus de texte SQL.
+
+La dépendance TestNG en scope compile/version `RELEASE` est retirée après recherche
+confirmant l’absence d’import ou de test TestNG. Les tests existants restent JUnit
+Jupiter. Aucun endpoint ni calcul métier utile n’est supprimé. Compose exige
+désormais des mots de passe locaux non vides, sans publier leurs valeurs.
+
+### 3. Documentation utilisée
+
+- [Conventions du projet](CONVENTIONS.md), notamment contrat de verrouillage,
+  routes, rôles, SQL, transactions et format des erreurs.
+- [MySQL 8.4 — Locking Reads](https://dev.mysql.com/doc/refman/8.4/en/innodb-locking-reads.html) :
+  durée du verrou et comportement après attente d’une transaction concurrente.
+- [MySQL — Consistent Nonlocking Reads](https://dev.mysql.com/doc/refman/8.2/en/innodb-consistent-read.html) :
+  instantanés de lecture et différence entre READ COMMITTED et REPEATABLE READ.
+- [Spring Data JPA — Transactionality](https://docs.spring.io/spring-data/jpa/reference/jpa/transactions.html) :
+  frontières transactionnelles des services et repositories.
+- Les sources et tests des deux modules présents dans la branche fusionnée.
+
+### 4. Utilisation de l’IA
+
+Outil : Codex. Modèle : GPT-6. Niveau de raisonnement exact non communiqué.
+Prompt reçu en français :
+
+```text
+gis comme un développeur senior Java/Spring Boot et responsable de l'intégration technique du projet Concert Ticketing System.
+
+Les développements de la Personne A (infrastructure, catalogue, API REST, sécurité et documentation) et de la Personne B (clients, cartes de fidélité, achats, calcul des prix et gestion de la capacité) sont maintenant réunis dans la branche actuelle develop.
+
+Ta mission est de réaliser une intégration complète, professionnelle et fonctionnelle des deux parties, sans perdre de fonctionnalités ni supprimer du code utile.
+
+Commence par analyser l'ensemble du projet et identifier les problèmes d'intégration : entités JPA, repositories, services, controllers, DTO, migrations Flyway, configuration Spring Security, dépendances Maven, routes API et transactions.
+
+Vérifie et corrige particulièrement :
+
+Base de données : compatibilité des migrations Flyway V1 et V2, relations entre Artist, Venue, Concert, Client, LoyaltyCard et TicketPurchase, contraintes SQL et configuration ddl-auto=validate.
+
+API REST : fonctionnement des endpoints du catalogue, inscription des clients, création des cartes de fidélité et achat de billets.
+
+Sécurité : cohérence des rôles CLIENT, PRODUCTEUR et ADMIN, authentification HTTP Basic avec BCrypt, accès public aux endpoints prévus et réponses 401/403.
+
+Logique métier : calcul des prix avec ou sans carte de fidélité, validité des cartes, contrôle de la capacité des salles et prévention des achats concurrents dépassant les places disponibles.
+
+Transactions : utilisation correcte de ConcertRepository.findByIdForUpdate() dans les achats, avec des transactions atomiques.
+
+Docker : démarrage de MySQL avec Docker Compose, connexion Spring Boot, migrations Flyway et fonctionnement de l'application.
+
+Tests : tests JPA, services, MockMvc, sécurité, Testcontainers MySQL et concurrence. Vérifie notamment le scénario de deux achats simultanés de quatre billets lorsqu'il ne reste que cinq places : un seul achat doit réussir.
+
+Exécute les commandes nécessaires, notamment docker compose up -d et .\mvnw.cmd clean verify, puis corrige progressivement les erreurs jusqu'à obtenir un projet cohérent et fonctionnel.
+
+Règles importantes : travaille uniquement sur la branche develop, sans créer ni fusionner d'autres branches. Avant toute modification importante, vérifie l'état Git et préserve les changements existants. Ne supprime pas de fonctionnalités pour faire passer les tests, ne désactive pas la sécurité, ne remplace pas MySQL par H2 et ne contourne pas les migrations Flyway. Privilégie les corrections minimales et justifie les modifications qui touchent aux deux parties
+```
+
+Propositions retenues : adaptateur du gateway, verrous sur concert/client,
+transactions READ_COMMITTED, évolution SQL additive, erreurs REST communes et
+intégration du frontend avec CSRF. Les corrections touchant les deux parties
+raccordent leurs contrats existants plutôt que de remplacer une implémentation.
+Aucune modification manuelle de l’utilisateur n’a été observée pendant cette tâche.
+
+### 5. Tests et vérifications
+
+Le bilan initial `.\mvnw.cmd clean verify` a réellement échoué : 163 tests,
+100 erreurs de contexte liées au gateway absent. Après corrections, la sélection
+des parcours intégrés, concurrence et cartes a réussi : 24 tests. La vérification
+complète finale a réussi : 199 tests, aucun échec, aucune erreur, aucun test ignoré.
+
+La suite comprend 25 cas REST/JPA/SQL/formulaires intégrés, 6 cas de concurrence
+et verrouillage, 5 tests unitaires d’achat, les tests de prix/cartes/clients de B
+et tous les tests catalogue, Swagger, Actuator et sécurité de A.
+Le scénario de survente est répété trois fois dans la suite de concurrence :
+45 places déjà vendues sur 50, deux demandes simultanées de 4, exactement un
+succès, un refus `JAUGE_INSUFFISANTE`, 49 places vendues et un seul nouvel achat.
+Les threads utilisent des transactions réelles indépendantes et des fixtures
+commitées ; aucun mock ne remplace le verrou MySQL.
+
+Le test de verrou maintient aussi une transaction détentrice ouverte et vérifie
+qu’un achat attend sa libération. Un autre test confirme qu’une acquisition par
+le gateway hors transaction est refusée. Les demandes simultanées de cartes
+produisent une seule carte active. Les tests HTML vérifient le refus sans CSRF,
+l’acceptation du vrai jeton/cookie rendu et les achats/cartes depuis les formulaires.
+
+`docker compose up -d` et `docker compose ps` ont été exécutés : MySQL 8.4 est
+`healthy`, publié localement sur 3307. Le JAR a ensuite démarré contre ce MySQL
+et appliqué les migrations manquantes. Un parcours HTTP réel a créé artiste,
+salle, concert, client, carte et achat : quatre billets à 50 avec carte donnent
+180.00, une remise de 0.10 et 46 places restantes. Le doublon de carte renvoie
+409 ; l’achat anonyme 401 ; l’achat PRODUCTEUR 403. Santé, Swagger et lecture
+publique sont accessibles. Le processus temporaire a été arrêté et seuls les
+enregistrements créés par ce contrôle ont été nettoyés par leurs identifiants.
+
+### 6. Problèmes rencontrés et corrections
+
+Le défaut initial de bean empêchait le démarrage de l’application et de ses tests
+d’intégration. L’adaptateur et le verrou repository le corrigent. Les autres
+défauts relevés par analyse ont été corrigés avant les tests ciblés : isolement
+de la lecture de capacité, absence de verrou sur création de carte, précision
+du total, 404 client absent, erreurs REST non uniformes et pages HTML bloquées.
+Les exécutions ciblée et finale n’ont pas présenté d’échec d’assertion après ces
+corrections. Aucun résultat de test non exécuté n’est annoncé comme réussi.
+
+Les avertissements résiduels de dépôts Maven secondaires et de l’agent Mockito
+sont non bloquants. Aucune capture d’écran n’a été réalisée. Les rapports réels
+figurent dans `target/surefire-reports` et les journaux de vérification sous `target`.
+
+### 7. Traçabilité
+
+Travail uniquement sur develop, sans création/fusion de branche. Les contrôles
+Git successifs et `git diff --check` ont été exécutés. Le diff de V1/V2 est vide.
+Les modifications concernent les raccords de repository/service, validations,
+relations de billetterie, sécurité des formulaires, advice, nouvelle V3, tests,
+Compose, suppression de la dépendance inutilisée et documentation.
+Les anciens tests sont conservés ; seul le mock du repository client des tests
+de carte est aligné sur le nouvel appel verrouillé.
+Commit de cette intervention : non créé. Pull Request : non créée.
+
+### 8. Conclusion
+
+L’intégration est fonctionnelle avec 199 tests passés et un contrôle HTTP réel du
+JAR contre Compose. Aucun H2, schéma généré par Hibernate ni désactivation de
+sécurité n’a été utilisé. Le calcul et les écrans des deux modules sont préservés.
+MySQL est laissé actif ; le JAR de contrôle est arrêté. Les comptes restent des
+identités de démonstration en mémoire, distinctes des clients métier ; une liaison
+personnelle compte/client pour la production reste hors du contrat actuel.
+
+## Instructions d’installation rapide — 21 octobre 2026
+
+- Objectif : rendre l’installation locale compréhensible dans le README, en portugais.
+- Outil : Codex ; modèle et niveau de raisonnement non exposés dans cette session.
+- Prompt utilisateur original : « rapidamente faz um readme com as intrucoes clara de instalcao ».
+- Traduction française du prompt : « Fais rapidement un README avec des instructions claires d’installation. »
+- Proposition retenue : ajouter en tête du README les prérequis, le clonage de develop, la configuration privée du .env, le démarrage MySQL, l’import des variables dans PowerShell, le démarrage Spring Boot, les URL, les comptes de démonstration et les commandes de test et d’arrêt. La documentation technique existante est conservée.
+- Vérification : git diff --check -- README.md exécuté, code de sortie 0. Aucun test applicatif relancé pour cette modification documentaire. Les commandes de démarrage sont documentées ; elles n’ont pas été réexécutées pendant cette intervention.
+- Correction : aucune modification du code applicatif. Aucun commit ni aucune Pull Request créés pour cette intervention.

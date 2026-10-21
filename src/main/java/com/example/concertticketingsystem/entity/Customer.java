@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 @Entity
 @Table(name = "customers")
@@ -14,15 +16,18 @@ public class Customer {
     private Long id;
 
     @NotBlank
-    @Column(nullable = false)
+    @Size(max = 150)
+    @Column(nullable = false, length = 150)
     private String name;
 
     @Email
     @NotBlank
+    @Size(max = 255)
     @Column(nullable = false, unique = true)
     private String email;
 
     @Valid
+    @NotNull
     @Embedded
     @AttributeOverrides({
             @AttributeOverride(
@@ -31,7 +36,7 @@ public class Customer {
             ),
             @AttributeOverride(
                     name = "city",
-                    column = @Column(name = "city", nullable = false)
+                    column = @Column(name = "city", nullable = false, length = 150)
             )
     })
     private Address address;

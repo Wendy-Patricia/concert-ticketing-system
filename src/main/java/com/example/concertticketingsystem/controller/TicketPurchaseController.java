@@ -9,11 +9,15 @@ import jakarta.validation.Valid;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 import java.net.URI;
 
 @RestController
 @RequestMapping("/api/achats")
+@Tag(name = "Achats")
 public class TicketPurchaseController {
 
     private final TicketPurchaseService ticketPurchaseService;
@@ -24,6 +28,8 @@ public class TicketPurchaseController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('CLIENT')")
+    @SecurityRequirement(name = "basicAuth")
     public ResponseEntity<TicketPurchaseResponse> purchase(
             @Valid @RequestBody TicketPurchaseRequest request) {
 

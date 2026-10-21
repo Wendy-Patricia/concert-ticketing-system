@@ -1,10 +1,103 @@
 # Concert Ticketing System
 
+## Instalação rápida — Windows / PowerShell
+
+Precisas de **Git, JDK 25 e Docker Desktop**. Abre o Docker Desktop e espera que o motor Linux esteja ativo. Não precisas de instalar Maven: o projeto inclui o Maven Wrapper.
+
+### 1. Obter o projeto
+
+```powershell
+git clone --branch develop https://github.com/Wendy-Patricia/concert-ticketing-system.git
+cd concert-ticketing-system
+java -version
+docker compose version
+```
+
+Se já tens o projeto, abre o PowerShell na pasta que contém `pom.xml` e `compose.yaml`. O comando `java -version` deve indicar Java 25.
+
+### 2. Configurar a base de dados
+
+```powershell
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+notepad .env
+```
+
+No ficheiro `.env`, preenche `MYSQL_PASSWORD` e `MYSQL_ROOT_PASSWORD` com duas palavras-passe locais diferentes. Mantém as restantes opções do exemplo. Se a porta 3306 estiver ocupada, altera `MYSQL_PORT=3307`.
+
+Guarda o ficheiro. O `.env` é privado e está ignorado pelo Git; não publiques palavras-passe.
+
+### 3. Iniciar o MySQL
+
+```powershell
+docker compose up -d --wait --wait-timeout 180
+docker compose ps
+```
+
+O serviço `mysql` deve aparecer com o estado **healthy**. Os dados ficam guardados num volume Docker.
+
+### 4. Iniciar a aplicação
+
+O Spring Boot não carrega o `.env` automaticamente. Executa este bloco no PowerShell, na raiz do projeto, para importar a configuração do MySQL e iniciar a aplicação:
+
+```powershell
+$compose = docker compose config --format json | ConvertFrom-Json
+$mysql = $compose.services.mysql
+$env:MYSQL_HOST = '127.0.0.1'
+$env:MYSQL_PORT = [string]$mysql.ports[0].published
+$env:MYSQL_DATABASE = [string]$mysql.environment.MYSQL_DATABASE
+$env:MYSQL_USER = [string]$mysql.environment.MYSQL_USER
+$env:MYSQL_PASSWORD = [string]$mysql.environment.MYSQL_PASSWORD
+
+.\mvnw.cmd spring-boot:run
+```
+
+Mantém este terminal aberto. No primeiro arranque, o Maven descarrega as dependências e o Flyway aplica automaticamente as migrações da base de dados.
+
+### 5. Aceder e testar
+
+| Página | Endereço |
+|---|---|
+| Swagger — consultar e testar a API | http://localhost:8080/swagger-ui.html |
+| Estado da aplicação — deve indicar `UP` | http://localhost:8080/actuator/health |
+| Lista de concertos | http://localhost:8080/api/concerts |
+| Inscrição de clientes | http://localhost:8080/clients/inscription |
+
+Para endpoints protegidos, usa **Authorize** no Swagger ou **Basic Auth** no Postman:
+
+| Papel | Utilizador | Palavra-passe de demonstração |
+|---|---|---|
+| CLIENT | `client` | `ClientDemo123!` |
+| PRODUCTEUR | `producteur` | `ProducteurDemo123!` |
+| ADMIN | `admin` | `AdminDemo123!` |
+
+Estas contas destinam-se à demonstração local.
+
+Para executar todos os testes, abre outro terminal na pasta do projeto, com o Docker Desktop ativo:
+
+```powershell
+.\mvnw.cmd clean verify
+```
+
+O resultado esperado é **BUILD SUCCESS**. Os testes de integração usam MySQL isolado através de Testcontainers.
+
+### Parar e resolver problemas comuns
+
+- **Parar a aplicação:** `Ctrl+C` no terminal onde está em execução.
+- **Parar o MySQL mantendo os dados:** `docker compose down`.
+- **Docker indisponível:** inicia o Docker Desktop e tenta novamente.
+- **Porta 3306 ocupada:** usa `MYSQL_PORT=3307` no `.env`, repete o passo 3 e depois o passo 4.
+- **Porta 8080 ocupada:** executa `$env:SERVER_PORT='8081'` antes de iniciar a aplicação e usa a porta 8081 nos endereços.
+- **Acesso MySQL recusado após alterar palavras-passe:** um volume já inicializado mantém as credenciais originais; volta a usar essas credenciais no `.env`.
+
+---
+
+## Documentation technique
+
 API REST de catalogue de concerts développée avec Java 25 et Spring Boot 4.1.1.
-Le périmètre disponible couvre les artistes, les salles et les concerts, avec
-validation métier, persistance MySQL, migrations Flyway, HTTP Basic et documentation
-OpenAPI interactive. Les fonctionnalités clients, achats et fidélité sont réservées
-à la Personne B ; leurs règles d’accès sont préparées dans la sécurité.
+Le périmètre intégré couvre le catalogue, l’inscription des clients, les cartes
+de fidélité et l’achat de billets, avec validation métier, persistance MySQL,
+migrations Flyway, HTTP Basic et documentation OpenAPI interactive. L’intégration
+des deux modules est réalisée sur la branche `develop`.
 
 ## Technologies et prérequis
 
@@ -56,7 +149,7 @@ src/main/java/com/example/concertticketingsystem/
 ├── config/        # Clock, sécurité et OpenAPI
 ├── controller/    # Endpoints REST et advice du catalogue
 ├── dto/           # Records de requête, réponse et erreur
-├── entity/        # Artist, Venue, Concert
+├── entity/        # Artist, Venue, Concert, Customer, Address, LoyaltyCard, TicketPurchase
 ├── exception/     # Erreurs métier du catalogue
 ├── repository/    # Accès JPA
 └── service/       # Logique métier transactionnelle
@@ -151,12 +244,17 @@ et le nettoyage Flyway sont désactivés.
 | Version | État | Responsabilité |
 |---|---|---|
 | `V1__create_catalog.sql` | Présente | Catalogue : `artists`, `venues`, `concerts`, contraintes et index |
-| `V2__create_ticketing.sql` | Réservée | Personne B : clients, fidélité et achats |
-| `V3__insert_demo_data.sql` | Réservée | Données de démonstration |
+| `V2__create_ticketing.sql` | Présente | Clients, fidélité et achats |
+| `V3__integrate_ticketing_constraints.sql` | Présente | Totaux d’achat en DECIMAL(12,2), total positif et période de carte valide |
 
 Une migration appliquée à une base partagée ne doit plus être modifiée : ajouter
 une nouvelle version pour toute évolution. L’historique est enregistré dans
 `flyway_schema_history`. Voir [les conventions des migrations](src/main/resources/db/migration/README.md).
+
+V1 et V2 sont conservées sans modification. V3 remplace la réservation documentaire
+de données de démonstration qui n’avait aucun script. Les futures données de
+démonstration devront utiliser une nouvelle version disponible. Le total d’achat
+utilise `DECIMAL(12,2)` pour accepter jusqu’à six billets au prix catalogue maximal.
 
 - `Artist` : `id` généré, nom obligatoire et unique, genre musical facultatif.
 - `Venue` : nom et ville obligatoires, couple `(name, city)` unique, capacité
@@ -178,6 +276,9 @@ utilisant l’heure courante.
 | POST | `/api/production/artistes` | Création d’un artiste | PRODUCTEUR ou ADMIN |
 | POST | `/api/production/concerts` | Création d’un concert | PRODUCTEUR ou ADMIN |
 | POST | `/api/admin/salles` | Création d’une salle | ADMIN |
+| POST | `/api/clients` | Inscription d’un client et adresse | Public |
+| POST | `/api/clients/{id}/carte-fidelite` | Création d’une carte valable un an | CLIENT ou ADMIN |
+| POST | `/api/achats` | Achat de 1 à 6 billets | CLIENT |
 
 Les filtres de liste sont facultatifs et combinables par ET :
 
@@ -223,6 +324,42 @@ chiffres entiers. Les créations répondent 201 ; le concert fournit aussi
 Les erreurs contiennent `timestamp`, `status`, `code`, `message` et `path`, sans
 SQL ni trace interne. Exemple de code applicatif : `CONCERT_INTROUVABLE`.
 
+## Clients, fidélité et achats
+
+Inscription d’un client, sans authentification :
+
+```json
+{"name":"Alice","email":"alice@example.com","street":"Rue de Paris","city":"Nancy"}
+```
+
+L’email est unique. Une carte se crée par POST `/api/clients/{id}/carte-fidelite`,
+sans corps JSON, avec le rôle CLIENT ou ADMIN. Elle est active à partir du jour
+d’achat inclus et jusqu’à sa date d’expiration exclusive, un an plus tard.
+Une deuxième carte active renvoie 409 `CARTE_DEJA_ACTIVE` ; une carte expirée
+peut être renouvelée. Les créations concurrentes sont sérialisées par un verrou
+sur le client.
+
+Achat de billets avec HTTP Basic et le rôle CLIENT :
+
+```json
+{"concertId":1,"customerId":1,"quantity":2}
+```
+
+Le serveur calcule le total : `prix unitaire × quantité`, moins 10 % si une carte
+est active, puis arrondi à deux décimales avec `HALF_UP`. Le prix et la remise ne
+sont pas acceptés comme des montants à imposer par le client. La réponse 201
+contient `code`, `quantity`, `unitPrice`, `discountRate`, `totalAmount` et
+`remainingSeats`. Une référence absente produit 404 ; un concert commencé ou
+des places insuffisantes produisent 409. Un achat refusé n’est pas enregistré.
+
+Chaque achat utilise une transaction atomique `READ_COMMITTED`. Le gateway JPA
+appelle `ConcertRepository.findByIdForUpdate()` avec `PESSIMISTIC_WRITE`, puis le
+service calcule `venue.capacity - SUM(ticket_purchases.quantity)` et enregistre
+l’achat avant de libérer le verrou au commit. `READ_COMMITTED` permet de voir les
+ventes validées après l’attente du verrou, sans réutiliser un ancien instantané
+MySQL. Le test de deux achats simultanés de quatre billets avec cinq places
+restantes vérifie qu’un seul réussit et qu’une place reste disponible.
+
 ## Sécurité et comptes de démonstration
 
 | Identifiant | Mot de passe public de démonstration | Rôle |
@@ -238,15 +375,29 @@ ces valeurs pour un environnement distinct de la démonstration locale.
 
 CLIENT dispose des achats et cartes de fidélité. ADMIN dispose de l’administration,
 des droits du producteur et de la création de cartes, sans hériter du droit d’achat.
-POST `/api/clients` est public. Ces routes métier restent à intégrer avec la Personne B.
+POST `/api/clients` est public. Les comptes de démonstration restent distincts des
+clients métier créés par cette route ; ils fournissent des rôles de démonstration,
+sans association personnelle entre identifiant Basic et numéro de client.
 Les chemins non répertoriés sont refusés.
 
 L’API utilise HTTP Basic sans session, sans formulaire de connexion et sans cache
 d’authentification entre requêtes. Les erreurs 401 comportent `WWW-Authenticate`.
 CSRF est désactivé pour les clients REST explicites, sans authentification par
-cookie. Stateless seul ne protège pas contre CSRF dans un navigateur qui envoie
-Basic automatiquement : revoir ce choix si ce mode d’utilisation est introduit.
+cookie sur `/api/**`. Les formulaires HTML sont protégés par un jeton CSRF
+stocké dans un cookie, sans session d’authentification. Les formulaires Thymeleaf
+incluent ce jeton automatiquement.
 Utiliser HTTPS hors du poste local.
+
+### Interface Thymeleaf préservée
+
+- `/clients/inscription` : inscription publique.
+- `/fidelite` : formulaire réservé à CLIENT ou ADMIN.
+- `/billets/acheter` : formulaire réservé à CLIENT.
+- `/css/style.css` : feuille de style publique.
+
+Le navigateur demande les identifiants HTTP Basic pour les pages protégées.
+Les POST de formulaire nécessitent le jeton CSRF de la page, contrairement aux
+POST JSON de l’API. Les erreurs affichées dans les formulaires ne révèlent pas de SQL.
 
 ## Swagger / OpenAPI et Postman
 
@@ -286,7 +437,7 @@ la description OpenAPI.
 ## Tests et vérification
 
 Docker doit être actif. Les tests Testcontainers démarrent un MySQL 8.4 isolé et
-appliquent V1 ; ils n’utilisent pas les données du volume Compose. Il n’est pas
+appliquent V1, V2 et V3 ; ils n’utilisent pas les données du volume Compose. Il n’est pas
 nécessaire de démarrer manuellement le service Compose pour ces tests.
 
 ```powershell
@@ -304,13 +455,19 @@ nécessaire de démarrer manuellement le service Compose pour ces tests.
 
 # Swagger réel, contrat OpenAPI, Actuator et parcours HTTP sécurisé avec MySQL
 .\mvnw.cmd "-Dtest=OpenApiAndHealthTests" test
+
+# Parcours intégrés clients/cartes/achats, SQL, sécurité et formulaires
+.\mvnw.cmd "-Dtest=TicketingIntegrationTests" test
+
+# Transactions indépendantes, verrous MySQL et achats simultanés
+.\mvnw.cmd "-Dtest=TicketingConcurrencyTests" test
 ```
 
 Les tests JPA relisent les données après `flush`/`clear` et vérifient aussi les
 contraintes par SQL direct. Les tests API combinent MockMvc et les véritables
 services/repositories. Les tests de sécurité vérifient les règles HTTP et de
-méthode ; les routes réservées à la Personne B utilisent uniquement des sondes
-de test. La suite OpenAPI/Actuator utilise la véritable chaîne de sécurité,
+méthode ; les parcours de billetterie sont maintenant testés avec leurs véritables
+controllers et services, en complément des sondes de sécurité. La suite OpenAPI/Actuator utilise la véritable chaîne de sécurité,
 les ressources Swagger et MySQL/Testcontainers.
 
 Les rapports sont générés dans `target/surefire-reports`. Les résultats réellement

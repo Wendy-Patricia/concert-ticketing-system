@@ -7,11 +7,13 @@ import com.example.concertticketingsystem.service.CustomerService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 import java.net.URI;
 
 @RestController
 @RequestMapping("/api/clients")
+@Tag(name = "Clients")
 public class CustomerController {
 
     private final CustomerService customerService;

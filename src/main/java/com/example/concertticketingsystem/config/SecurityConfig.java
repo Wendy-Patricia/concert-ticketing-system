@@ -24,6 +24,7 @@ import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.NullSecurityContextRepository;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import tools.jackson.databind.ObjectMapper;
 
 @Configuration(proxyBeanMethods = false)
@@ -56,8 +57,9 @@ public class SecurityConfig {
         };
 
         return http
-                // API REST destinee aux clients explicites (Postman), sans session ni formulaire.
-                .csrf(AbstractHttpConfigurer::disable)
+                // REST : Authorization explicite ; formulaires Thymeleaf : jeton CSRF en cookie.
+                .csrf(csrf -> csrf.csrfTokenRepository(new CookieCsrfTokenRepository())
+                        .ignoringRequestMatchers("/api/**"))
                 .formLogin(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
                 .requestCache(AbstractHttpConfigurer::disable)
@@ -73,6 +75,10 @@ public class SecurityConfig {
                                 "/actuator/health", "/actuator/health/**", "/v3/api-docs", "/v3/api-docs/**", "/v3/api-docs.yaml",
                                 "/swagger-ui.html", "/swagger-ui/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/clients").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/clients/inscription", "/css/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/clients/inscription").permitAll()
+                        .requestMatchers("/fidelite").hasAnyRole("CLIENT", "ADMIN")
+                        .requestMatchers("/billets/acheter").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.POST, "/api/achats").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.POST, "/api/clients/{id}/carte-fidelite")
                                 .hasAnyRole("CLIENT", "ADMIN")

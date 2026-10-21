@@ -7,6 +7,8 @@ import com.example.concertticketingsystem.dto.ApiError;
 import com.example.concertticketingsystem.exception.CatalogConflictException;
 import com.example.concertticketingsystem.exception.CatalogNotFoundException;
 import com.example.concertticketingsystem.exception.CatalogValidationException;
+import com.example.concertticketingsystem.exception.BusinessConflictException;
+import com.example.concertticketingsystem.exception.ResourceNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -19,12 +21,28 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
-@RestControllerAdvice(assignableTypes = {ArtistController.class, VenueController.class, ConcertController.class})
+@RestControllerAdvice(assignableTypes = {ArtistController.class, VenueController.class, ConcertController.class,
+        CustomerController.class, LoyaltyCardController.class, TicketPurchaseController.class})
 public class CatalogExceptionHandler {
     private final Clock clock;
 
     public CatalogExceptionHandler(Clock clock) {
         this.clock = clock;
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ApiError> ticketingNotFound(ResourceNotFoundException exception, HttpServletRequest request) {
+        return error(HttpStatus.NOT_FOUND, exception.getCode(), exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(BusinessConflictException.class)
+    public ResponseEntity<ApiError> ticketingConflict(BusinessConflictException exception, HttpServletRequest request) {
+        return error(HttpStatus.CONFLICT, exception.getCode(), exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiError> invalidTicketingInput(HttpServletRequest request) {
+        return error(HttpStatus.BAD_REQUEST, "VALIDATION_ECHOUEE", "Données de billetterie invalides.", request);
     }
 
     @ExceptionHandler(CatalogNotFoundException.class)
